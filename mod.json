@@ -13,5 +13,10 @@
 	"description": "ToastyReplay-Lite the official parent release of ToastyReplay, built from the ground up, with accuracy and performance.",
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
+	},
+	"resources": {
+		"files": [
+			"resources/*.png"
+		]
 	}
 }
