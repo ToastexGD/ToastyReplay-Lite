@@ -4,6 +4,7 @@
 #include <Geode/ui/Popup.hpp>
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/ui/ScrollLayer.hpp>
+#include <Geode/ui/Scrollbar.hpp>
 #include <Geode/ui/TextArea.hpp>
 #include <vector>
 
@@ -11,16 +12,19 @@ using namespace geode::prelude;
 
 class ToastyMenu : public geode::Popup {
 protected:
-    CCMenu* m_menu;
+    enum Tab { TabMain, TabMacros, TabSettings, TabKeybinds, TabAbout, TabCount };
+    struct Group {
+        CCNode* node = nullptr;
+        CCMenu* menu = nullptr;
+    };
     int m_mode = 0;
-    int m_tab = 0;
-    CCScale9Sprite* m_modeCards[3] = {};
-    CCSprite* m_modeIcons[3] = {};
+    int m_tab = TabMain;
+    CCScale9Sprite* m_modeBgs[3] = {};
     CCLabelBMFont* m_modeLabels[3] = {};
-    CCScale9Sprite* m_tabBgs[6] = {};
-    CCNode* m_pages[6] = {};
-    std::vector<ScrollLayer*> m_scrolls[6];
-    TextInput* m_seedInput;
+    CCScale9Sprite* m_tabBgs[TabCount] = {};
+    CCNode* m_pages[TabCount] = {};
+    std::vector<CCLayer*> m_pageTouchNodes[TabCount];
+    TextInput* m_seedInput = nullptr;
     Slider* m_scaleSlider = nullptr;
     CCLabelBMFont* m_scalePct = nullptr;
     bool m_dragging = false;
@@ -28,15 +32,31 @@ protected:
 
     bool init();
     ~ToastyMenu();
-    CCNode* makeMacroCell(std::string const& name);
-    void updateModeCards();
+    void addHeader();
+    void addSidebar();
+    Group makePage(int tab);
+    void addPageTitle(CCNode* page, const char* title, const char* hint);
+    CCScale9Sprite* addPanel(CCNode* page, CCPoint center, CCSize size);
+    ScrollLayer* addScroll(CCNode* page, int tab, CCPoint pos, CCSize size);
+
+    Group makeRow(const char* title, float height, float titleWidth);
+    CCNode* makeToggleRow(const char* id, const char* title, bool on);
+    CCNode* makeSectionRow(const char* title);
+    CCNode* makeMacroRow(const char* name);
+    CCNode* makeKeybindRow(const char* title, const char* saveId, enumKeyCodes def);
+    void updateModes();
     void updateTabs();
     void updatePages();
     void clampMainLayer();
 
     void onMode(CCObject* sender);
     void onTab(CCObject* sender);
-    void onNothing(CCObject* sender);
+    void onToggleOption(CCObject* sender);
+    void onAddMacro(CCObject* sender);
+    void onRefreshMacros(CCObject* sender);
+    void onMacroOptions(CCObject* sender);
+    void onAccentPrev(CCObject* sender);
+    void onAccentNext(CCObject* sender);
     void onRename(CCObject* sender);
     void onSeedInfo(CCObject* sender);
     void onScaleSlider(CCObject* sender);

@@ -20,7 +20,7 @@ class $modify(ToastyPause, PauseLayer) {
         auto menu = this->getChildByID("left-button-menu");
         if (!menu) return;
 
-        // bot menu button
+        // toasty menu button
         CCNode* spr = CCSprite::create("MenuIcon.png"_spr);
         if (!spr) spr = ButtonSprite::create("TR", "goldFont.fnt", "GJ_button_04.png", .8f);
 

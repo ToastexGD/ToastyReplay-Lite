@@ -1,5 +1,23 @@
 #include "ToastyMenu.hpp"
 
+static constexpr float POPUP_W = 450.f;
+static constexpr float POPUP_H = 290.f;
+static constexpr float MARGIN = 12.f;
+static constexpr float HEADER_Y = 272.f;
+static constexpr float DIVIDER_Y = 256.f;
+static constexpr float SIDE_X = 58.f;
+static constexpr float SIDE_W = 92.f;
+static constexpr float PANEL_X = 269.f;
+static constexpr float PANEL_W = 314.f;
+static constexpr float PANEL_LEFT = PANEL_X - PANEL_W / 2.f;
+static constexpr float SCROLLBAR_X = 434.f;
+static constexpr float TITLE_Y = 246.f;
+static constexpr float ROW_X = 116.f;
+static constexpr float ROW_W = 306.f;
+static constexpr float ROW_H = 26.f;
+static constexpr ccColor3B PANEL_COLOR = { 58, 29, 13 };
+static constexpr ccColor3B ACCENT_COLOR = { 0, 110, 60 };
+
 static void moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
     closeBtn->setPosition(closeBtn->getParent()->convertToNodeSpace(
         mainLayer->convertToWorldSpace({ size.width - 8.f, size.height - 8.f })
@@ -30,6 +48,20 @@ static std::string keyName(enumKeyCodes key) {
     return name.empty() ? "?" : name;
 }
 
+static std::string modVersion() {
+    return Mod::get()->getVersion().toVString();
+}
+
+static std::string modDevelopers() {
+    auto devs = Mod::get()->getDevelopers();
+    if (devs.empty()) return "Unknown";
+    std::string out = devs.front();
+    for (size_t i = 1; i < devs.size(); i++) {
+        out += ", " + devs[i];
+    }
+    return out;
+}
+
 ToastyMenu* ToastyMenu::create() {
     auto ret = new ToastyMenu();
     if (ret->init()) {
@@ -48,382 +80,174 @@ ToastyMenu::~ToastyMenu() {
 }
 
 bool ToastyMenu::init() {
-    if (!Popup::init(450.f, 290.f)) return false;
+    if (!Popup::init(POPUP_W, POPUP_H)) return false;
 
     // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
-    m_menu = CCMenu::create();
-    m_menu->setPosition({ 0.f, 0.f });
-    m_menu->setContentSize(m_size);
-    m_mainLayer->addChild(m_menu, 10);
-
-    auto title = CCLabelBMFont::create("ToastyReplay Lite", "goldFont.fnt");
-    title->setAnchorPoint({ 0.f, .5f });
-    title->setPosition({ 16.f, 272.f });
-    title->limitLabelWidth(165.f, .5f, .1f);
-    m_mainLayer->addChild(title);
-
-    auto version = CCLabelBMFont::create("v1.0.0", "bigFont.fnt");
-    version->setAnchorPoint({ 0.f, .5f });
-    version->setScale(.3f);
-    version->setPosition({ 188.f, 272.f });
-    m_mainLayer->addChild(version);
-
-    auto author = CCLabelBMFont::create("by Toastexgd", "goldFont.fnt");
-    author->setAnchorPoint({ 0.f, .5f });
-    author->setScale(.35f);
-    author->setPosition({ 236.f, 272.f });
-    m_mainLayer->addChild(author);
-
-    // sidebar
-    auto sidebar = makeBG({ 92.f, 240.f }, { 58, 29, 13 }, 220, false);
-    sidebar->setPosition({ 58.f, 134.f });
-    m_mainLayer->addChild(sidebar);
-
-    // sidebar tabs
-    struct TabDef { const char* name; int idx; };
-    std::vector<TabDef> tabs = {
-        { "Main", 0 }, { "Macros", 1 }, { "Settings", 2 }, { "Keybinds", 3 }, { "About", 5 }
-    };
-    for (int slot = 0; slot < static_cast<int>(tabs.size()); slot++) {
-        auto node = CCNode::create();
-        node->setContentSize({ 84.f, 24.f });
-
-        auto bg = makeBG({ 84.f, 24.f }, { 0, 0, 0 }, 70, true);
-        bg->setPosition({ 42.f, 12.f });
-        node->addChild(bg);
-        m_tabBgs[tabs[slot].idx] = bg;
-
-        auto label = CCLabelBMFont::create(tabs[slot].name, "bigFont.fnt");
-        label->setAnchorPoint({ 0.f, .5f });
-        label->setPosition({ 10.f, 12.f });
-        label->limitLabelWidth(64.f, .4f, .1f);
-        node->addChild(label);
-
-        auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onTab));
-        item->setTag(tabs[slot].idx);
-        item->setPosition({ 58.f, 240.f - slot * 28.f });
-        m_menu->addChild(item);
-    }
-
-
-
-
-    auto makePage = [this](int idx) -> std::pair<CCNode*, CCMenu*> {
-        auto page = CCNode::create();
-        page->setContentSize(m_size);
-        m_mainLayer->addChild(page);
-        m_pages[idx] = page;
-
-        auto menu = CCMenu::create();
-        menu->setPosition({ 0.f, 0.f });
-        menu->setContentSize(m_size);
-        page->addChild(menu);
-        return { page, menu };
-    };
-    auto makeScroll = [this](CCNode* page, int idx, CCPoint pos, CCSize size) -> ScrollLayer* {
-        auto scroll = ScrollLayer::create(size);
-        scroll->setPosition(pos);
-        scroll->m_contentLayer->setLayout(
-            ColumnLayout::create()
-                ->setAxisReverse(true)
-                ->setAxisAlignment(AxisAlignment::End)
-                ->setAutoGrowAxis(size.height)
-                ->setGap(4.f)
-        );
-        page->addChild(scroll);
-        m_scrolls[idx].push_back(scroll);
-        return scroll;
-    };
-    auto pageHeader = [](CCNode* page, const char* text) {
-        auto label = CCLabelBMFont::create(text, "goldFont.fnt");
-        label->setAnchorPoint({ 0.f, .5f });
-        label->setScale(.4f);
-        label->setPosition({ 114.f, 246.f });
-        page->addChild(label);
-    };
-    auto toggleCell = [this](const char* text, bool on) -> CCNode* {
-        auto cell = CCNode::create();
-        cell->setContentSize({ 318.f, 26.f });
-
-        auto bg = makeBG({ 318.f, 26.f }, { 0, 0, 0 }, 45, true);
-        bg->setPosition({ 159.f, 13.f });
-        cell->addChild(bg);
-
-        auto label = CCLabelBMFont::create(text, "bigFont.fnt");
-        label->setAnchorPoint({ 0.f, .5f });
-        label->setPosition({ 10.f, 13.f });
-        label->limitLabelWidth(200.f, .45f, .1f);
-        cell->addChild(label);
-
-        auto menu = CCMenu::create();
-        menu->setPosition({ 0.f, 0.f });
-        menu->setContentSize(cell->getContentSize());
-        cell->addChild(menu);
-
-        auto toggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(ToastyMenu::onNothing), .6f);
-        toggle->setPosition({ 300.f, 13.f });
-        toggle->toggle(on);
-        menu->addChild(toggle);
-        return cell;
-    };
-    auto barCell = [](const char* text) -> CCNode* {
-        auto cell = CCNode::create();
-        cell->setContentSize({ 318.f, 20.f });
-
-        auto bg = makeBG({ 318.f, 20.f }, { 0, 0, 0 }, 80, true);
-        bg->setPosition({ 159.f, 10.f });
-        cell->addChild(bg);
-
-        auto label = CCLabelBMFont::create(text, "goldFont.fnt");
-        label->setPosition({ 159.f, 10.f });
-        label->limitLabelWidth(200.f, .35f, .1f);
-        cell->addChild(label);
-        return cell;
-    };
+    this->addHeader();
+    this->addSidebar();
 
     // main page
     {
-        auto [page, menu] = makePage(0);
-        pageHeader(page, "Macro Controls");
+        auto [page, menu] = this->makePage(TabMain);
+        this->addPageTitle(page, "Macro Controls", nullptr);
 
         // disable, record, play, buttons in the "macro controlls"
         const char* modeNames[3] = { "Disable", "Record", "Play" };
-        const char* modeIcons[3] = { "Macro-Disable.png"_spr, "Macro-Record.png"_spr, "Macro-Play.png"_spr };
-        float modeX[3] = { 165.f, 275.f, 385.f };
+        const char* modeTextures[3] = { "GJ_button_04.png", "GJ_button_06.png", "GJ_button_01.png" };
+        const char* modeIds[3] = { "mode-disable", "mode-record", "mode-play" };
         for (int i = 0; i < 3; i++) {
             auto node = CCNode::create();
-            node->setContentSize({ 92.f, 58.f });
+            node->setContentSize({ 98.f, 40.f });
 
-            auto bg = makeBG({ 92.f, 58.f }, { 0, 0, 0 }, 60, true);
-            bg->setPosition({ 46.f, 29.f });
+            auto bg = CCScale9Sprite::create(modeTextures[i]);
+            bg->setContentSize(node->getContentSize());
+            bg->setPosition({ 49.f, 20.f });
             node->addChild(bg);
-            m_modeCards[i] = bg;
-
-            if (auto icon = CCSprite::create(modeIcons[i])) {
-                icon->setScale(30.f / std::max(icon->getContentWidth(), icon->getContentHeight()));
-                icon->setPosition({ 46.f, 37.f });
-                node->addChild(icon);
-                m_modeIcons[i] = icon;
-            }
+            m_modeBgs[i] = bg;
 
             auto label = CCLabelBMFont::create(modeNames[i], "bigFont.fnt");
-            label->setPosition({ 46.f, 12.f });
-            label->limitLabelWidth(70.f, .35f, .1f);
+            label->setPosition({ 49.f, 20.f });
+            label->limitLabelWidth(78.f, .5f, .1f);
             node->addChild(label);
             m_modeLabels[i] = label;
 
             auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onMode));
             item->setTag(i);
-            item->setPosition({ modeX[i], 205.f });
+            item->setID(modeIds[i]);
+            item->setPosition({ PANEL_LEFT + 49.f + i * 108.f, 214.f });
             menu->addChild(item);
         }
-        this->updateModeCards();
 
-        // feature list
-        auto featureBG = makeBG({ 326.f, 148.f }, { 58, 29, 13 }, 220, false);
-        featureBG->setPosition({ 275.f, 98.f });
-        page->addChild(featureBG);
+        this->addPanel(page, { PANEL_X, 104.f }, { PANEL_W, 164.f });
+        auto scroll = this->addScroll(page, TabMain, { ROW_X, 26.f }, { ROW_W, 156.f });
 
-        auto scroll = makeScroll(page, 0, { 116.f, 28.f }, { 318.f, 140.f });
+        scroll->m_contentLayer->addChild(this->makeToggleRow("tps-bypass", "TPS Bypass", true));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("speedhack", "Speedhack", false));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("show-hitboxes", "Show Hitboxes", false));
 
-        // tps bypass option
-        scroll->m_contentLayer->addChild(toggleCell("tps bypass", true));
+        auto seed = this->makeRow("Set Seed", ROW_H, 100.f);
+        seed.node->setID("set-seed");
 
-        // noclip option
-        scroll->m_contentLayer->addChild(toggleCell("noclip", false));
-
-        // speedhack option
-        scroll->m_contentLayer->addChild(toggleCell("speedhack", false));
-
-        // show hitboxes option
-        scroll->m_contentLayer->addChild(toggleCell("show hitboxes", false));
-
-        // set seed option
-        auto seedCell = CCNode::create();
-        seedCell->setContentSize({ 318.f, 26.f });
-
-        auto seedBG = makeBG({ 318.f, 26.f }, { 0, 0, 0 }, 45, true);
-        seedBG->setPosition({ 159.f, 13.f });
-        seedCell->addChild(seedBG);
-
-        auto seedLabel = CCLabelBMFont::create("set seed", "bigFont.fnt");
-        seedLabel->setAnchorPoint({ 0.f, .5f });
-        seedLabel->setPosition({ 10.f, 13.f });
-        seedLabel->limitLabelWidth(90.f, .45f, .1f);
-        seedCell->addChild(seedLabel);
-
-        m_seedInput = TextInput::create(160.f, "enter seed...");
+        m_seedInput = TextInput::create(150.f, "Enter seed...");
         m_seedInput->setCommonFilter(CommonFilter::Uint);
-        m_seedInput->setScale(.6f);
-        m_seedInput->setPosition({ 168.f, 13.f });
-        seedCell->addChild(m_seedInput);
+        m_seedInput->setScale(.62f);
+        m_seedInput->setPosition({ 180.f, ROW_H / 2.f });
+        m_seedInput->setID("input");
+        seed.node->addChild(m_seedInput);
 
-        auto seedMenu = CCMenu::create();
-        seedMenu->setPosition({ 0.f, 0.f });
-        seedMenu->setContentSize(seedCell->getContentSize());
-        seedCell->addChild(seedMenu);
-
-        // seed info button
         if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
-            infoSpr->setScale(.6f);
+            infoSpr->setScale(.55f);
             auto infoBtn = CCMenuItemSpriteExtra::create(infoSpr, this, menu_selector(ToastyMenu::onSeedInfo));
-            infoBtn->setPosition({ 240.f, 13.f });
-            seedMenu->addChild(infoBtn);
+            infoBtn->setPosition({ 244.f, ROW_H / 2.f });
+            seed.menu->addChild(infoBtn);
         }
 
-        auto seedToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(ToastyMenu::onNothing), .6f);
-        seedToggle->setPosition({ 300.f, 13.f });
-        seedMenu->addChild(seedToggle);
+        auto seedToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(ToastyMenu::onToggleOption), .6f);
+        seedToggle->setPosition({ ROW_W - 18.f, ROW_H / 2.f });
+        seedToggle->setID("toggle");
+        seed.menu->addChild(seedToggle);
+        scroll->m_contentLayer->addChild(seed.node);
 
-        scroll->m_contentLayer->addChild(seedCell);
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
+        this->updateModes();
     }
 
     // macros page
     {
-        auto [page, menu] = makePage(1);
-        pageHeader(page, "macro list");
+        auto [page, menu] = this->makePage(TabMacros);
+        this->addPageTitle(page, "Macro List", nullptr);
 
-        // add macro button
         auto plusSpr = ButtonSprite::create("+", "bigFont.fnt", "GJ_button_01.png", .8f);
         plusSpr->setScale(.4f);
-        auto plusBtn = CCMenuItemSpriteExtra::create(plusSpr, this, menu_selector(ToastyMenu::onNothing));
-        plusBtn->setPosition({ 400.f, 246.f });
+        auto plusBtn = CCMenuItemSpriteExtra::create(plusSpr, this, menu_selector(ToastyMenu::onAddMacro));
+        plusBtn->setID("add-macro");
+        plusBtn->setPosition({ 398.f, TITLE_Y });
         menu->addChild(plusBtn);
 
-        // refresh macros button
         if (auto refreshSpr = CCSprite::createWithSpriteFrameName("GJ_updateBtn_001.png")) {
             refreshSpr->setScale(.4f);
-            auto refreshBtn = CCMenuItemSpriteExtra::create(refreshSpr, this, menu_selector(ToastyMenu::onNothing));
-            refreshBtn->setPosition({ 426.f, 246.f });
+            auto refreshBtn = CCMenuItemSpriteExtra::create(refreshSpr, this, menu_selector(ToastyMenu::onRefreshMacros));
+            refreshBtn->setID("refresh-macros");
+            refreshBtn->setPosition({ 426.f, TITLE_Y });
             menu->addChild(refreshBtn);
         }
 
-        auto listBG = makeBG({ 326.f, 212.f }, { 58, 29, 13 }, 220, false);
-        listBG->setPosition({ 275.f, 130.f });
-        page->addChild(listBG);
-
-        auto scroll = makeScroll(page, 1, { 116.f, 44.f }, { 318.f, 186.f });
+        this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
+        auto scroll = this->addScroll(page, TabMacros, { ROW_X, 26.f }, { ROW_W, 206.f });
 
         const char* macroNames[] = {
             "diddy??????????", "wave spam", "SAKUPEN CIRCLES XXXX", "sync test",
             "sakupen diddy", "old", "full run backup"
-        };
+        }; // honestly this is just temperary untill someone sets up the macro recording system along with whatever is needed to be implemented related to that
         for (auto name : macroNames) {
-            scroll->m_contentLayer->addChild(this->makeMacroCell(name));
+            scroll->m_contentLayer->addChild(this->makeMacroRow(name));
         }
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
-
-        auto hint = CCLabelBMFont::create("click edit to rename", "chatFont.fnt");
-        hint->setScale(.4f);
-        hint->setOpacity(120);
-        hint->setPosition({ 275.f, 33.f });
-        page->addChild(hint);
     }
 
     // settings page
     {
-        auto [page, menu] = makePage(2);
-        pageHeader(page, "settings");
+        auto page = this->makePage(TabSettings).node;
+        this->addPageTitle(page, "Settings", nullptr);
 
-        auto bg = makeBG({ 326.f, 212.f }, { 58, 29, 13 }, 220, false);
-        bg->setPosition({ 275.f, 130.f });
-        page->addChild(bg);
+        this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
+        auto scroll = this->addScroll(page, TabSettings, { ROW_X, 26.f }, { ROW_W, 206.f });
 
-        auto scroll = makeScroll(page, 2, { 116.f, 28.f }, { 318.f, 204.f });
-
-        // menu scale slider
-        auto sliderCell = CCNode::create();
-        sliderCell->setContentSize({ 318.f, 26.f });
-
-        auto sliderBG = makeBG({ 318.f, 26.f }, { 0, 0, 0 }, 45, true);
-        sliderBG->setPosition({ 159.f, 13.f });
-        sliderCell->addChild(sliderBG);
-
-        auto sliderLabel = CCLabelBMFont::create("menu scale", "bigFont.fnt");
-        sliderLabel->setAnchorPoint({ 0.f, .5f });
-        sliderLabel->setPosition({ 10.f, 13.f });
-        sliderLabel->limitLabelWidth(120.f, .45f, .1f);
-        sliderCell->addChild(sliderLabel);
+        // menu scale is live so the popup can be sized before anything else exists
+        auto scaleRow = this->makeRow("Menu Scale", ROW_H, 95.f);
+        scaleRow.node->setID("menu-scale");
 
         float savedScale = Mod::get()->getSavedValue<float>("menu-scale", 1.f);
 
-        auto slider = Slider::create(this, menu_selector(ToastyMenu::onScaleSlider), .55f);
-        slider->setPosition({ 212.f, 13.f });
-        slider->setValue((savedScale - .7f) / .4f);
-        sliderCell->addChild(slider);
-        m_scaleSlider = slider;
+        m_scaleSlider = Slider::create(this, menu_selector(ToastyMenu::onScaleSlider), .45f);
+        m_scaleSlider->setPosition({ 185.f, ROW_H / 2.f });
+        m_scaleSlider->setValue((savedScale - .7f) / .4f);
+        scaleRow.node->addChild(m_scaleSlider);
 
-        auto pct = CCLabelBMFont::create(
+        m_scalePct = CCLabelBMFont::create(
             fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f))).c_str(), "bigFont.fnt"
         );
-        pct->setAnchorPoint({ 1.f, .5f });
-        pct->setScale(.4f);
-        pct->setPosition({ 312.f, 13.f });
-        sliderCell->addChild(pct);
-        m_scalePct = pct;
-        scroll->m_contentLayer->addChild(sliderCell);
+        m_scalePct->setAnchorPoint({ 1.f, .5f });
+        m_scalePct->setScale(.35f);
+        m_scalePct->setPosition({ ROW_W - 10.f, ROW_H / 2.f });
+        scaleRow.node->addChild(m_scalePct);
+        scroll->m_contentLayer->addChild(scaleRow.node);
 
-        // accent color arrows
-        auto accentCell = CCNode::create();
-        accentCell->setContentSize({ 318.f, 26.f });
-
-        auto accentBG = makeBG({ 318.f, 26.f }, { 0, 0, 0 }, 45, true);
-        accentBG->setPosition({ 159.f, 13.f });
-        accentCell->addChild(accentBG);
-
-        auto accentLabel = CCLabelBMFont::create("accent color", "bigFont.fnt");
-        accentLabel->setAnchorPoint({ 0.f, .5f });
-        accentLabel->setPosition({ 10.f, 13.f });
-        accentLabel->limitLabelWidth(120.f, .45f, .1f);
-        accentCell->addChild(accentLabel);
-
-        auto accentMenu = CCMenu::create();
-        accentMenu->setPosition({ 0.f, 0.f });
-        accentMenu->setContentSize(accentCell->getContentSize());
-        accentCell->addChild(accentMenu);
+        auto accentRow = this->makeRow("Accent Color", ROW_H, 95.f);
+        accentRow.node->setID("accent-color");
 
         if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
             leftSpr->setScale(.45f);
-            auto leftBtn = CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(ToastyMenu::onNothing));
-            leftBtn->setPosition({ 245.f, 13.f });
-            accentMenu->addChild(leftBtn);
+            auto leftBtn = CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(ToastyMenu::onAccentPrev));
+            leftBtn->setID("prev");
+            leftBtn->setPosition({ 236.f, ROW_H / 2.f });
+            accentRow.menu->addChild(leftBtn);
         }
 
-        auto swatch = makeBG({ 15.f, 15.f }, { 0, 200, 100 }, 255, true);
-        swatch->setPosition({ 272.f, 13.f });
-        accentCell->addChild(swatch);
+        auto swatch = makeBG({ 15.f, 15.f }, ACCENT_COLOR, 255, true);
+        swatch->setPosition({ 262.f, ROW_H / 2.f });
+        accentRow.node->addChild(swatch);
 
         if (auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
             rightSpr->setScale(.45f);
             rightSpr->setFlipX(true);
-            auto rightBtn = CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(ToastyMenu::onNothing));
-            rightBtn->setPosition({ 299.f, 13.f });
-            accentMenu->addChild(rightBtn);
+            auto rightBtn = CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(ToastyMenu::onAccentNext));
+            rightBtn->setID("next");
+            rightBtn->setPosition({ 288.f, ROW_H / 2.f });
+            accentRow.menu->addChild(rightBtn);
         }
-        scroll->m_contentLayer->addChild(accentCell);
+        scroll->m_contentLayer->addChild(accentRow.node);
 
-        // show notifications option
-        scroll->m_contentLayer->addChild(toggleCell("show notifications", true));
-
-        // remember settings option
-        scroll->m_contentLayer->addChild(toggleCell("remember settings", true));
-
-        // auto save macros option
-        scroll->m_contentLayer->addChild(toggleCell("auto save macros", true));
-
-        // check for updates option
-        scroll->m_contentLayer->addChild(toggleCell("check for updates", true));
-
-        // confirm on exit option
-        scroll->m_contentLayer->addChild(toggleCell("confirm on exit", false));
-
-        // developer mode option
-        scroll->m_contentLayer->addChild(toggleCell("developer mode", false));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("show-notifications", "Show Notifications", true));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("remember-settings", "Remember Settings", true));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("auto-save-macros", "Auto Save Macros", true));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("check-for-updates", "Check For Updates", true));
+        scroll->m_contentLayer->addChild(this->makeToggleRow("confirm-on-exit", "Confirm On Exit", false));
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -431,114 +255,71 @@ bool ToastyMenu::init() {
 
     // keybinds page
     {
-        auto [page, menu] = makePage(3);
-        pageHeader(page, "keybinds");
+        auto page = this->makePage(TabKeybinds).node;
+        this->addPageTitle(page, "Keybinds", "Windows & macOS");
 
-        auto sub = CCLabelBMFont::create("windows & macos", "chatFont.fnt");
-        sub->setAnchorPoint({ 0.f, .5f });
-        sub->setScale(.4f);
-        sub->setOpacity(120);
-        sub->setPosition({ 114.f, 234.f });
-        page->addChild(sub);
+        this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
+        auto scroll = this->addScroll(page, TabKeybinds, { ROW_X, 26.f }, { ROW_W, 206.f });
 
-        auto bg = makeBG({ 326.f, 200.f }, { 58, 29, 13 }, 220, false);
-        bg->setPosition({ 275.f, 124.f });
-        page->addChild(bg);
+        scroll->m_contentLayer->addChild(this->makeKeybindRow("Open Menu", "key-open-menu", KEY_F8));
+        scroll->m_contentLayer->addChild(this->makeKeybindRow("Record", "key-record", KEY_F1));
+        scroll->m_contentLayer->addChild(this->makeKeybindRow("Replay", "key-replay", KEY_F2));
+        scroll->m_contentLayer->addChild(this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
+        scroll->m_contentLayer->addChild(this->makeKeybindRow("Speedhack", "key-speedhack", KEY_Shift));
 
-        auto scroll = makeScroll(page, 3, { 116.f, 28.f }, { 318.f, 192.f });
-
-        // keybind buttons
-        auto keyCell = [this](const char* name, const char* saveId, enumKeyCodes def) -> CCNode* {
-            auto cell = CCNode::create();
-            cell->setContentSize({ 318.f, 32.f });
-
-            auto bg = makeBG({ 318.f, 32.f }, { 0, 0, 0 }, 45, true);
-            bg->setPosition({ 159.f, 16.f });
-            cell->addChild(bg);
-
-            auto label = CCLabelBMFont::create(name, "bigFont.fnt");
-            label->setAnchorPoint({ 0.f, .5f });
-            label->setPosition({ 10.f, 16.f });
-            label->limitLabelWidth(200.f, .45f, .1f);
-            cell->addChild(label);
-
-            auto menu = CCMenu::create();
-            menu->setPosition({ 0.f, 0.f });
-            menu->setContentSize(cell->getContentSize());
-            cell->addChild(menu);
-
-            auto saved = static_cast<enumKeyCodes>(
-                Mod::get()->getSavedValue<int>(saveId, static_cast<int>(def))
-            );
-            auto spr = ButtonSprite::create(keyName(saved).c_str(), "goldFont.fnt", "GJ_button_04.png", .8f);
-            spr->setScale(.55f);
-            auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(ToastyMenu::onBindKey));
-            btn->setUserObject(CCString::create(saveId));
-            btn->setPosition({ 285.f, 16.f });
-            menu->addChild(btn);
-            return cell;
-        };
-        scroll->m_contentLayer->addChild(keyCell("open menu", "key-open-menu", KEY_F8));
-        scroll->m_contentLayer->addChild(keyCell("record", "key-record", KEY_F1));
-        scroll->m_contentLayer->addChild(keyCell("replay", "key-replay", KEY_F2));
-        scroll->m_contentLayer->addChild(keyCell("frame step", "key-frame-step", KEY_F3));
-        scroll->m_contentLayer->addChild(keyCell("speedhack", "key-speedhack", KEY_Shift));
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
     }
 
     // about page
     {
-        auto [page, menu] = makePage(5);
-        pageHeader(page, "about");
+        auto page = this->makePage(TabAbout).node;
+        this->addPageTitle(page, "About", nullptr);
 
-        auto bg = makeBG({ 326.f, 212.f }, { 58, 29, 13 }, 220, false);
-        bg->setPosition({ 275.f, 130.f });
-        page->addChild(bg);
+        this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
+        auto scroll = this->addScroll(page, TabAbout, { ROW_X, 26.f }, { ROW_W, 206.f });
 
-        auto scroll = makeScroll(page, 5, { 116.f, 28.f }, { 318.f, 204.f });
+        scroll->m_contentLayer->addChild(this->makeSectionRow(Mod::get()->getName().data()));
 
-        scroll->m_contentLayer->addChild(barCell("toastyreplay lite"));
-
-        auto textCell = CCNode::create();
-        textCell->setContentSize({ 318.f, 40.f });
-        auto text = SimpleTextArea::create(
-            "Soo Text is just here until you guys change it :)", "chatFont.fnt", .6f, 300.f
+        auto blurbRow = CCNode::create();
+        blurbRow->setContentSize({ ROW_W, 40.f });
+        auto blurb = SimpleTextArea::create(
+            "Soo Text is just here until you guys change it :)", "chatFont.fnt", .6f, ROW_W - 20.f
         );
-        text->setAnchorPoint({ 0.f, 1.f });
-        text->setPosition({ 8.f, 38.f });
-        textCell->addChild(text);
-        scroll->m_contentLayer->addChild(textCell);
+        blurb->setAnchorPoint({ 0.f, 1.f });
+        blurb->setPosition({ 10.f, 38.f });
+        blurbRow->addChild(blurb);
+        scroll->m_contentLayer->addChild(blurbRow);
 
-        scroll->m_contentLayer->addChild(barCell("developer"));
+        scroll->m_contentLayer->addChild(this->makeSectionRow("Developer"));
 
-        auto devCell = CCNode::create();
-        devCell->setContentSize({ 318.f, 22.f });
-        auto dev = CCLabelBMFont::create("Toastexgd", "goldFont.fnt");
-        dev->setScale(.5f);
-        dev->setPosition({ 159.f, 11.f });
-        devCell->addChild(dev);
-        scroll->m_contentLayer->addChild(devCell);
+        auto devRow = CCNode::create();
+        devRow->setContentSize({ ROW_W, 22.f });
+        auto dev = CCLabelBMFont::create(modDevelopers().c_str(), "goldFont.fnt");
+        dev->setPosition({ ROW_W / 2.f, 11.f });
+        dev->limitLabelWidth(ROW_W - 20.f, .5f, .1f);
+        devRow->addChild(dev);
+        scroll->m_contentLayer->addChild(devRow);
 
-        scroll->m_contentLayer->addChild(barCell("version"));
+        scroll->m_contentLayer->addChild(this->makeSectionRow("Version"));
 
-        auto verCell = CCNode::create();
-        verCell->setContentSize({ 318.f, 22.f });
-        auto ver = CCLabelBMFont::create("v1.0.0", "bigFont.fnt");
+        auto verRow = CCNode::create();
+        verRow->setContentSize({ ROW_W, 22.f });
+        auto ver = CCLabelBMFont::create(modVersion().c_str(), "bigFont.fnt");
         ver->setScale(.4f);
-        ver->setPosition({ 159.f, 11.f });
-        verCell->addChild(ver);
-        scroll->m_contentLayer->addChild(verCell);
+        ver->setPosition({ ROW_W / 2.f, 11.f });
+        verRow->addChild(ver);
+        scroll->m_contentLayer->addChild(verRow);
 
-        scroll->m_contentLayer->addChild(barCell("credits"));
+        scroll->m_contentLayer->addChild(this->makeSectionRow("Credits"));
 
-        auto creditsCell = CCNode::create();
-        creditsCell->setContentSize({ 318.f, 22.f });
+        auto creditsRow = CCNode::create();
+        creditsRow->setContentSize({ ROW_W, 22.f });
         auto credits = CCLabelBMFont::create("I don't really know who all the devs are currently.", "chatFont.fnt");
-        credits->setScale(.55f);
-        credits->setPosition({ 159.f, 11.f });
-        creditsCell->addChild(credits);
-        scroll->m_contentLayer->addChild(creditsCell);
+        credits->setPosition({ ROW_W / 2.f, 11.f });
+        credits->limitLabelWidth(ROW_W - 20.f, .55f, .1f);
+        creditsRow->addChild(credits);
+        scroll->m_contentLayer->addChild(creditsRow);
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -547,15 +328,221 @@ bool ToastyMenu::init() {
     this->updateTabs();
     this->updatePages();
 
-    auto footerVersion = CCLabelBMFont::create("v1.0.0", "chatFont.fnt");
-    footerVersion->setAnchorPoint({ 0.f, .5f });
-    footerVersion->setScale(.4f);
-    footerVersion->setOpacity(150);
-    footerVersion->setPosition({ 16.f, 10.f });
-    m_mainLayer->addChild(footerVersion);
-
     s_instance = this;
     return true;
+}
+
+void ToastyMenu::addHeader() {
+    auto title = CCLabelBMFont::create("ToastyReplay Lite", "goldFont.fnt");
+    title->setAnchorPoint({ 0.f, .5f });
+    title->setPosition({ 16.f, HEADER_Y });
+    title->limitLabelWidth(165.f, .5f, .1f);
+    m_mainLayer->addChild(title);
+
+    auto version = CCLabelBMFont::create(modVersion().c_str(), "bigFont.fnt");
+    version->setAnchorPoint({ 0.f, .5f });
+    version->setScale(.3f);
+    version->setPosition({ title->getPositionX() + title->getScaledContentWidth() + 12.f, HEADER_Y });
+    m_mainLayer->addChild(version);
+
+    auto divider = makeBG({ POPUP_W - MARGIN * 2.f, 2.f }, { 0, 0, 0 }, 90, false);
+    divider->setPosition({ POPUP_W / 2.f, DIVIDER_Y });
+    m_mainLayer->addChild(divider);
+}
+
+void ToastyMenu::addSidebar() {
+    auto sidebar = makeBG({ SIDE_W, 214.f }, PANEL_COLOR, 220, false);
+    sidebar->setPosition({ SIDE_X, 129.f });
+    m_mainLayer->addChild(sidebar);
+
+    auto menu = CCMenu::create();
+    menu->setPosition({ 0.f, 0.f });
+    menu->setContentSize(m_size);
+    menu->setID("tab-menu");
+    m_mainLayer->addChild(menu, 10);
+
+    const char* tabNames[TabCount] = { "Main", "Macros", "Settings", "Keybinds", "About" };
+    for (int i = 0; i < TabCount; i++) {
+        auto node = CCNode::create();
+        node->setContentSize({ 84.f, 26.f });
+
+        auto bg = makeBG(node->getContentSize(), { 0, 0, 0 }, 70, true);
+        bg->setPosition({ 42.f, 13.f });
+        node->addChild(bg);
+        m_tabBgs[i] = bg;
+
+        auto label = CCLabelBMFont::create(tabNames[i], "bigFont.fnt");
+        label->setAnchorPoint({ 0.f, .5f });
+        label->setPosition({ 10.f, 13.f });
+        label->limitLabelWidth(64.f, .4f, .1f);
+        node->addChild(label);
+
+        auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onTab));
+        item->setTag(i);
+        item->setPosition({ SIDE_X, 215.f - i * 30.f });
+        menu->addChild(item);
+    }
+}
+
+ToastyMenu::Group ToastyMenu::makePage(int tab) {
+    Group page;
+    page.node = CCNode::create();
+    page.node->setContentSize(m_size);
+    m_mainLayer->addChild(page.node);
+    m_pages[tab] = page.node;
+
+    page.menu = CCMenu::create();
+    page.menu->setPosition({ 0.f, 0.f });
+    page.menu->setContentSize(m_size);
+    page.node->addChild(page.menu);
+    return page;
+}
+
+void ToastyMenu::addPageTitle(CCNode* page, const char* title, const char* hint) {
+    auto label = CCLabelBMFont::create(title, "goldFont.fnt");
+    label->setAnchorPoint({ 0.f, .5f });
+    label->setPosition({ PANEL_LEFT, TITLE_Y });
+    label->limitLabelWidth(160.f, .4f, .1f);
+    page->addChild(label);
+
+    if (!hint) return;
+
+    auto hintLabel = CCLabelBMFont::create(hint, "chatFont.fnt");
+    hintLabel->setAnchorPoint({ 1.f, .5f });
+    hintLabel->setOpacity(120);
+    hintLabel->setPosition({ POPUP_W - MARGIN, TITLE_Y });
+    hintLabel->limitLabelWidth(130.f, .4f, .1f);
+    page->addChild(hintLabel);
+}
+
+CCScale9Sprite* ToastyMenu::addPanel(CCNode* page, CCPoint center, CCSize size) {
+    auto panel = makeBG(size, PANEL_COLOR, 220, false);
+    panel->setPosition(center);
+    page->addChild(panel);
+    return panel;
+}
+
+ScrollLayer* ToastyMenu::addScroll(CCNode* page, int tab, CCPoint pos, CCSize size) {
+    auto scroll = ScrollLayer::create(size);
+    scroll->setPosition(pos);
+    scroll->m_contentLayer->setLayout(
+        ColumnLayout::create()
+            ->setAxisReverse(true)
+            ->setAxisAlignment(AxisAlignment::End)
+            ->setAutoGrowAxis(size.height)
+            ->setGap(4.f)
+    );
+    page->addChild(scroll);
+    m_pageTouchNodes[tab].push_back(scroll);
+
+    auto bar = Scrollbar::create(scroll);
+    bar->setPosition({ SCROLLBAR_X, pos.y + size.height / 2.f });
+    page->addChild(bar);
+    m_pageTouchNodes[tab].push_back(bar);
+    return scroll;
+}
+
+ToastyMenu::Group ToastyMenu::makeRow(const char* title, float height, float titleWidth) {
+    Group row;
+    row.node = CCNode::create();
+    row.node->setContentSize({ ROW_W, height });
+
+    auto bg = makeBG(row.node->getContentSize(), { 0, 0, 0 }, 45, true);
+    bg->setPosition({ ROW_W / 2.f, height / 2.f });
+    row.node->addChild(bg);
+
+    auto label = CCLabelBMFont::create(title, "bigFont.fnt");
+    label->setAnchorPoint({ 0.f, .5f });
+    label->setPosition({ 10.f, height / 2.f });
+    label->limitLabelWidth(titleWidth, .45f, .1f);
+    row.node->addChild(label);
+
+    row.menu = CCMenu::create();
+    row.menu->setPosition({ 0.f, 0.f });
+    row.menu->setContentSize(row.node->getContentSize());
+    row.node->addChild(row.menu);
+    return row;
+}
+
+CCNode* ToastyMenu::makeToggleRow(const char* id, const char* title, bool on) {
+    auto row = this->makeRow(title, ROW_H, 200.f);
+    row.node->setID(id);
+
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(ToastyMenu::onToggleOption), .6f);
+    toggle->setPosition({ ROW_W - 18.f, ROW_H / 2.f });
+    toggle->toggle(on);
+    toggle->setID("toggle");
+    row.menu->addChild(toggle);
+    return row.node;
+}
+
+CCNode* ToastyMenu::makeSectionRow(const char* title) {
+    auto row = CCNode::create();
+    row->setContentSize({ ROW_W, 20.f });
+
+    auto bg = makeBG(row->getContentSize(), { 0, 0, 0 }, 80, true);
+    bg->setPosition({ ROW_W / 2.f, 10.f });
+    row->addChild(bg);
+
+    auto label = CCLabelBMFont::create(title, "goldFont.fnt");
+    label->setPosition({ ROW_W / 2.f, 10.f });
+    label->limitLabelWidth(ROW_W - 20.f, .35f, .1f);
+    row->addChild(label);
+    return row;
+}
+
+CCNode* ToastyMenu::makeMacroRow(const char* name) {
+    auto row = CCNode::create();
+    row->setContentSize({ ROW_W, 28.f });
+
+    auto bg = makeBG(row->getContentSize(), { 0, 0, 0 }, 45, true);
+    bg->setPosition({ ROW_W / 2.f, 14.f });
+    row->addChild(bg);
+
+    auto label = CCLabelBMFont::create(name, "chatFont.fnt");
+    label->setAnchorPoint({ 0.f, .5f });
+    label->setPosition({ 10.f, 14.f });
+    label->limitLabelWidth(175.f, .65f, .1f);
+    row->addChild(label);
+
+    auto menu = CCMenu::create();
+    menu->setPosition({ 0.f, 0.f });
+    menu->setContentSize(row->getContentSize());
+    row->addChild(menu);
+
+    auto renameSpr = ButtonSprite::create("Edit", "bigFont.fnt", "GJ_button_04.png", .8f);
+    renameSpr->setScale(.4f);
+    auto renameBtn = CCMenuItemSpriteExtra::create(renameSpr, this, menu_selector(ToastyMenu::onRename));
+    renameBtn->setUserObject(label);
+    renameBtn->setID("rename");
+    renameBtn->setPosition({ 250.f, 14.f });
+    menu->addChild(renameBtn);
+
+    auto dotsSpr = ButtonSprite::create("...", "bigFont.fnt", "GJ_button_04.png", .8f);
+    dotsSpr->setScale(.4f);
+    auto dotsBtn = CCMenuItemSpriteExtra::create(dotsSpr, this, menu_selector(ToastyMenu::onMacroOptions));
+    dotsBtn->setID("options");
+    dotsBtn->setPosition({ 285.f, 14.f });
+    menu->addChild(dotsBtn);
+
+    return row;
+}
+
+CCNode* ToastyMenu::makeKeybindRow(const char* title, const char* saveId, enumKeyCodes def) {
+    auto row = this->makeRow(title, 32.f, 190.f);
+    row.node->setID(saveId);
+
+    auto saved = static_cast<enumKeyCodes>(
+        Mod::get()->getSavedValue<int>(saveId, static_cast<int>(def))
+    );
+    auto spr = ButtonSprite::create(keyName(saved).c_str(), "goldFont.fnt", "GJ_button_04.png", .8f);
+    spr->setScale(.55f);
+    auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(ToastyMenu::onBindKey));
+    btn->setUserObject(CCString::create(saveId));
+    btn->setID("bind");
+    btn->setPosition({ 272.f, 16.f });
+    row.menu->addChild(btn);
+    return row.node;
 }
 
 void ToastyMenu::show() {
@@ -593,18 +580,18 @@ void ToastyMenu::clampMainLayer() {
 
 bool ToastyMenu::ccTouchBegan(CCTouch* touch, CCEvent* event) {
     FLAlertLayer::ccTouchBegan(touch, event);
-    auto loc = this->convertTouchToNodeSpace(touch);
-    if (m_mainLayer->boundingBox().containsPoint(loc)) {
+
+    CCRect grip = { 0.f, DIVIDER_Y, m_size.width, m_size.height - DIVIDER_Y };
+    if (grip.containsPoint(m_mainLayer->convertTouchToNodeSpace(touch))) {
         m_dragging = true;
-        m_dragOffset = m_mainLayer->getPosition() - loc;
+        m_dragOffset = m_mainLayer->getPosition() - this->convertTouchToNodeSpace(touch);
     }
     return true;
 }
 
 void ToastyMenu::ccTouchMoved(CCTouch* touch, CCEvent* event) {
     if (m_dragging) {
-        auto loc = this->convertTouchToNodeSpace(touch);
-        m_mainLayer->setPosition(loc + m_dragOffset);
+        m_mainLayer->setPosition(this->convertTouchToNodeSpace(touch) + m_dragOffset);
         this->clampMainLayer();
     }
     else {
@@ -643,71 +630,19 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
     return false;
 }
 
-CCNode* ToastyMenu::makeMacroCell(std::string const& name) {
-    auto cell = CCNode::create();
-    cell->setContentSize({ 318.f, 28.f });
-
-    auto bg = makeBG({ 318.f, 28.f }, { 0, 0, 0 }, 45, true);
-    bg->setPosition({ 159.f, 14.f });
-    cell->addChild(bg);
-
-    auto label = CCLabelBMFont::create(name.c_str(), "chatFont.fnt");
-    label->setAnchorPoint({ 0.f, .5f });
-    label->setPosition({ 10.f, 14.f });
-    label->limitLabelWidth(190.f, .65f, .1f);
-    cell->addChild(label);
-
-    auto menu = CCMenu::create();
-    menu->setPosition({ 0.f, 0.f });
-    menu->setContentSize(cell->getContentSize());
-    cell->addChild(menu);
-
-    // rename button
-    auto renameSpr = ButtonSprite::create("edit", "bigFont.fnt", "GJ_button_04.png", .8f);
-    renameSpr->setScale(.4f);
-    auto renameBtn = CCMenuItemSpriteExtra::create(renameSpr, this, menu_selector(ToastyMenu::onRename));
-    renameBtn->setUserObject(label);
-    renameBtn->setPosition({ 266.f, 14.f });
-    menu->addChild(renameBtn);
-
-    // more options button
-    auto dotsSpr = ButtonSprite::create("...", "bigFont.fnt", "GJ_button_04.png", .8f);
-    dotsSpr->setScale(.4f);
-    auto dotsBtn = CCMenuItemSpriteExtra::create(dotsSpr, this, menu_selector(ToastyMenu::onNothing));
-    dotsBtn->setPosition({ 300.f, 14.f });
-    menu->addChild(dotsBtn);
-
-    return cell;
-}
-
-void ToastyMenu::updateModeCards() {
-    // disable red, record red dot, replay green
-    const ccColor3B iconColors[3] = { { 235, 60, 60 }, { 255, 80, 80 }, { 90, 220, 110 } };
+void ToastyMenu::updateModes() {
     for (int i = 0; i < 3; i++) {
         bool on = i == m_mode;
-        if (on) {
-            m_modeCards[i]->setColor({ 0, 110, 60 });
-            m_modeCards[i]->setOpacity(200);
-        }
-        else {
-            m_modeCards[i]->setColor({ 0, 0, 0 });
-            m_modeCards[i]->setOpacity(60);
-        }
-        if (m_modeIcons[i]) {
-            m_modeIcons[i]->setColor(on ? iconColors[i] : ccColor3B{ 130, 130, 130 });
-            m_modeIcons[i]->setOpacity(on ? 255 : 170);
-        }
-        if (m_modeLabels[i]) {
-            m_modeLabels[i]->setColor(on ? ccColor3B{ 255, 255, 255 } : ccColor3B{ 190, 190, 190 });
-        }
+        m_modeBgs[i]->setColor(on ? ccColor3B{ 255, 255, 255 } : ccColor3B{ 95, 95, 95 });
+        m_modeBgs[i]->setOpacity(on ? 255 : 190);
+        m_modeLabels[i]->setColor(on ? ccColor3B{ 255, 255, 255 } : ccColor3B{ 195, 195, 195 });
     }
 }
 
 void ToastyMenu::updateTabs() {
-    for (int i = 0; i < 6; i++) {
-        if (!m_tabBgs[i]) continue;
+    for (int i = 0; i < TabCount; i++) {
         if (i == m_tab) {
-            m_tabBgs[i]->setColor({ 0, 110, 60 });
+            m_tabBgs[i]->setColor(ACCENT_COLOR);
             m_tabBgs[i]->setOpacity(200);
         }
         else {
@@ -718,19 +653,18 @@ void ToastyMenu::updateTabs() {
 }
 
 void ToastyMenu::updatePages() {
-    for (int i = 0; i < 6; i++) {
-        if (!m_pages[i]) continue;
+    for (int i = 0; i < TabCount; i++) {
         bool visible = i == m_tab;
         m_pages[i]->setVisible(visible);
-        for (auto scroll : m_scrolls[i]) {
-            scroll->setTouchEnabled(visible);
+        for (auto node : m_pageTouchNodes[i]) {
+            node->setTouchEnabled(visible);
         }
     }
 }
 
 void ToastyMenu::onMode(CCObject* sender) {
     m_mode = static_cast<CCNode*>(sender)->getTag();
-    this->updateModeCards();
+    this->updateModes();
 }
 
 void ToastyMenu::onTab(CCObject* sender) {
@@ -739,15 +673,23 @@ void ToastyMenu::onTab(CCObject* sender) {
     this->updatePages();
 }
 
-void ToastyMenu::onNothing(CCObject* sender) {}
+void ToastyMenu::onToggleOption(CCObject* sender) {}
+
+void ToastyMenu::onAddMacro(CCObject* sender) {}
+
+void ToastyMenu::onRefreshMacros(CCObject* sender) {}
+
+void ToastyMenu::onMacroOptions(CCObject* sender) {}
+
+void ToastyMenu::onAccentPrev(CCObject* sender) {}
+
+void ToastyMenu::onAccentNext(CCObject* sender) {}
 
 void ToastyMenu::onScaleSlider(CCObject* sender) {
     float scale = .7f + m_scaleSlider->getValue() * .4f;
     Mod::get()->setSavedValue<float>("menu-scale", scale);
     m_mainLayer->setScale(scale);
-    if (m_scalePct) {
-        m_scalePct->setString(fmt::format("{}%", static_cast<int>(std::round(scale * 100.f))).c_str());
-    }
+    m_scalePct->setString(fmt::format("{}%", static_cast<int>(std::round(scale * 100.f))).c_str());
     this->clampMainLayer();
 }
 
@@ -809,7 +751,7 @@ bool RenamePopup::init(CCLabelBMFont* target) {
     // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
-    m_input = TextInput::create(230.f, "macro name");
+    m_input = TextInput::create(230.f, "Macro name");
     m_input->setString(target->getString());
     m_input->setMaxCharCount(24);
     m_input->setPosition({ 150.f, 88.f });
@@ -820,7 +762,6 @@ bool RenamePopup::init(CCLabelBMFont* target) {
     menu->setContentSize(m_size);
     m_mainLayer->addChild(menu);
 
-    // save button
     auto saveSpr = ButtonSprite::create("Save", "bigFont.fnt", "GJ_button_01.png", .8f);
     saveSpr->setScale(.7f);
     auto saveBtn = CCMenuItemSpriteExtra::create(saveSpr, this, menu_selector(RenamePopup::onSave));
@@ -834,7 +775,7 @@ void RenamePopup::onSave(CCObject* sender) {
     std::string str = m_input->getString();
     if (!str.empty()) {
         m_target->setString(str.c_str());
-        m_target->limitLabelWidth(200.f, .55f, .1f);
+        m_target->limitLabelWidth(175.f, .65f, .1f);
     }
     this->onClose(nullptr);
 }
