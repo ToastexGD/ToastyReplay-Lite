@@ -19,9 +19,9 @@ protected:
     };
     int m_mode = 0;
     int m_tab = TabMain;
-    CCScale9Sprite* m_modeBgs[3] = {};
+    NineSlice* m_modeBgs[3] = {};
     CCLabelBMFont* m_modeLabels[3] = {};
-    CCScale9Sprite* m_tabBgs[TabCount] = {};
+    NineSlice* m_tabBgs[TabCount] = {};
     CCNode* m_pages[TabCount] = {};
     std::vector<CCLayer*> m_pageTouchNodes[TabCount];
     TextInput* m_seedInput = nullptr;
@@ -36,7 +36,7 @@ protected:
     void addSidebar();
     Group makePage(int tab);
     void addPageTitle(CCNode* page, const char* title, const char* hint);
-    CCScale9Sprite* addPanel(CCNode* page, CCPoint center, CCSize size);
+    NineSlice* addPanel(CCNode* page, CCPoint center, CCSize size);
     ScrollLayer* addScroll(CCNode* page, int tab, CCPoint pos, CCSize size);
 
     Group makeRow(const char* title, float height, float titleWidth);
