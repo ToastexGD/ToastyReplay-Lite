@@ -1,4 +1,7 @@
 #include "ToastyMenu.hpp"
+#include "timing/TpsBypass.hpp"
+
+#include <charconv>
 
 static constexpr float POPUP_W = 450.f;
 static constexpr float POPUP_H = 290.f;
@@ -82,18 +85,15 @@ ToastyMenu::~ToastyMenu() {
 bool ToastyMenu::init() {
     if (!Popup::init(POPUP_W, POPUP_H)) return false;
 
-    // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     this->addHeader();
     this->addSidebar();
 
-    // main page
     {
         auto [page, menu] = this->makePage(TabMain);
         this->addPageTitle(page, "Macro Controls", nullptr);
 
-        // disable, record, play, buttons in the "macro controlls"
         const char* modeNames[3] = { "Disable", "Record", "Play" };
         const char* modeTextures[3] = { "GJ_button_04.png", "GJ_button_06.png", "GJ_button_01.png" };
         const char* modeIds[3] = { "mode-disable", "mode-record", "mode-play" };
@@ -123,9 +123,9 @@ bool ToastyMenu::init() {
         this->addPanel(page, { PANEL_X, 104.f }, { PANEL_W, 164.f });
         auto scroll = this->addScroll(page, TabMain, { ROW_X, 26.f }, { ROW_W, 156.f });
 
-        scroll->m_contentLayer->addChild(this->makeToggleRow("tps-bypass", "TPS Bypass", true));
         scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
         scroll->m_contentLayer->addChild(this->makeToggleRow("speedhack", "Speedhack", false));
+        scroll->m_contentLayer->addChild(this->makeTpsRow());
         scroll->m_contentLayer->addChild(this->makeToggleRow("show-hitboxes", "Show Hitboxes", false));
 
         auto seed = this->makeRow("Set Seed", ROW_H, 100.f);
@@ -156,7 +156,6 @@ bool ToastyMenu::init() {
         this->updateModes();
     }
 
-    // macros page
     {
         auto [page, menu] = this->makePage(TabMacros);
         this->addPageTitle(page, "Macro List", nullptr);
@@ -182,7 +181,7 @@ bool ToastyMenu::init() {
         const char* macroNames[] = {
             "diddy??????????", "wave spam", "SAKUPEN CIRCLES XXXX", "sync test",
             "sakupen diddy", "old", "full run backup"
-        }; // honestly this is just temperary untill someone sets up the macro recording system along with whatever is needed to be implemented related to that
+        };
         for (auto name : macroNames) {
             scroll->m_contentLayer->addChild(this->makeMacroRow(name));
         }
@@ -190,7 +189,6 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
-    // settings page
     {
         auto page = this->makePage(TabSettings).node;
         this->addPageTitle(page, "Settings", nullptr);
@@ -198,7 +196,6 @@ bool ToastyMenu::init() {
         this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
         auto scroll = this->addScroll(page, TabSettings, { ROW_X, 26.f }, { ROW_W, 206.f });
 
-        // menu scale is live so the popup can be sized before anything else exists
         auto scaleRow = this->makeRow("Menu Scale", ROW_H, 95.f);
         scaleRow.node->setID("menu-scale");
 
@@ -253,7 +250,6 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
-    // keybinds page
     {
         auto page = this->makePage(TabKeybinds).node;
         this->addPageTitle(page, "Keybinds", "Windows & macOS");
@@ -271,7 +267,6 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
-    // about page
     {
         auto page = this->makePage(TabAbout).node;
         this->addPageTitle(page, "About", nullptr);
@@ -476,6 +471,72 @@ CCNode* ToastyMenu::makeToggleRow(const char* id, const char* title, bool on) {
     return row.node;
 }
 
+CCNode* ToastyMenu::makeTpsRow() {
+    auto row = this->makeRow("TPS Bypass", 32.f, 92.f);
+    row.node->setID("tps-bypass");
+
+    if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
+        infoSpr->setScale(.5f);
+        auto info = CCMenuItemSpriteExtra::create(infoSpr, this, menu_selector(ToastyMenu::onTpsInfo));
+        info->setPosition({ 111.f, 16.f });
+        row.menu->addChild(info);
+    }
+
+    if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        leftSpr->setScale(.38f);
+        auto left = CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(ToastyMenu::onTpsAdjust));
+        left->setTag(-1);
+        left->setPosition({ 137.f, 16.f });
+        row.menu->addChild(left);
+    }
+
+    m_tpsInput = TextInput::create(118.f, "TPS");
+    m_tpsInput->setCommonFilter(CommonFilter::Uint);
+    m_tpsInput->setMaxCharCount(7);
+    m_tpsInput->setScale(.55f);
+    m_tpsInput->setPosition({ 194.f, 16.f });
+    m_tpsInput->setString(fmt::format("{}", toasty::tps::rate()));
+    m_tpsInput->setCallback([this](std::string const& value) {
+        int64_t parsed = 0;
+        auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
+        if (
+            result.ec == std::errc() &&
+            result.ptr == value.data() + value.size() &&
+            parsed >= toasty::tps::Minimum &&
+            parsed <= toasty::tps::Maximum
+        ) {
+            toasty::tps::setRate(parsed);
+        }
+    });
+    row.node->addChild(m_tpsInput);
+
+    if (auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        rightSpr->setScale(.38f);
+        rightSpr->setFlipX(true);
+        auto right = CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(ToastyMenu::onTpsAdjust));
+        right->setTag(1);
+        right->setPosition({ 250.f, 16.f });
+        row.menu->addChild(right);
+    }
+
+    m_tpsToggle = CCMenuItemToggler::createWithStandardSprites(
+        this,
+        menu_selector(ToastyMenu::onTpsToggle),
+        .6f
+    );
+    m_tpsToggle->setPosition({ ROW_W - 18.f, 16.f });
+    m_tpsToggle->toggle(toasty::tps::enabled());
+    row.menu->addChild(m_tpsToggle);
+
+    if (!toasty::tps::available()) {
+        m_tpsInput->setString("Unavailable");
+        m_tpsInput->setEnabled(false);
+        m_tpsToggle->setEnabled(false);
+    }
+
+    return row.node;
+}
+
 CCNode* ToastyMenu::makeSectionRow(const char* title) {
     auto row = CCNode::create();
     row->setContentSize({ ROW_W, 20.f });
@@ -563,7 +624,6 @@ void ToastyMenu::show() {
     m_mainLayer->setScale(0.f);
     m_mainLayer->runAction(CCEaseElasticOut::create(CCScaleTo::create(.5f, scale), .6f));
 
-    // gd hides the cursor in levels
     PlatformToolbox::showCursor();
 }
 
@@ -675,6 +735,43 @@ void ToastyMenu::onTab(CCObject* sender) {
 
 void ToastyMenu::onToggleOption(CCObject* sender) {}
 
+void ToastyMenu::onTpsToggle(CCObject* sender) {
+    auto toggle = static_cast<CCMenuItemToggler*>(sender);
+    auto next = !toggle->isToggled();
+    if (!toasty::tps::setEnabled(next)) {
+        toggle->toggle(false);
+        this->onTpsInfo(nullptr);
+    }
+}
+
+void ToastyMenu::onTpsAdjust(CCObject* sender) {
+    auto direction = static_cast<CCNode*>(sender)->getTag();
+    auto next = std::clamp<int64_t>(
+        toasty::tps::rate() + static_cast<int64_t>(direction) * 60,
+        toasty::tps::Minimum,
+        toasty::tps::Maximum
+    );
+    toasty::tps::setRate(next);
+    m_tpsInput->setString(fmt::format("{}", next));
+}
+
+void ToastyMenu::onTpsInfo(CCObject* sender) {
+    if (!toasty::tps::available()) {
+        FLAlertLayer::create(
+            "TPS Bypass Unavailable",
+            toasty::tps::unavailableReason(),
+            "OK"
+        )->show();
+        return;
+    }
+
+    FLAlertLayer::create(
+        "TPS Bypass",
+        "Runs level physics at the selected TPS without changing game speed. Changes apply on the next physics update. Higher values use more CPU, and manual input precision still depends on your input and display rate. Keep every other physics or TPS bypass disabled.",
+        "OK"
+    )->show();
+}
+
 void ToastyMenu::onAddMacro(CCObject* sender) {}
 
 void ToastyMenu::onRefreshMacros(CCObject* sender) {}
@@ -709,7 +806,6 @@ void ToastyMenu::onClose(CCObject* sender) {
     if (s_instance == this) s_instance = nullptr;
     s_captureBtn = nullptr;
 
-    // rehide cursor during gameplay
     if (PlayLayer::get()) {
         auto scene = CCDirector::sharedDirector()->getRunningScene();
         if (scene && !scene->getChildByType<PauseLayer>(0)) {
@@ -748,7 +844,6 @@ bool RenamePopup::init(CCLabelBMFont* target) {
     m_target = target;
     this->setTitle("Rename Macro");
 
-    // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     m_input = TextInput::create(230.f, "Macro name");

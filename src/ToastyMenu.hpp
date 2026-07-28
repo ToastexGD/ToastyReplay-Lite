@@ -25,12 +25,14 @@ protected:
     CCNode* m_pages[TabCount] = {};
     std::vector<CCLayer*> m_pageTouchNodes[TabCount];
     TextInput* m_seedInput = nullptr;
+    TextInput* m_tpsInput = nullptr;
+    CCMenuItemToggler* m_tpsToggle = nullptr;
     Slider* m_scaleSlider = nullptr;
     CCLabelBMFont* m_scalePct = nullptr;
     bool m_dragging = false;
     CCPoint m_dragOffset;
 
-    bool init();
+    bool init() override;
     ~ToastyMenu();
     void addHeader();
     void addSidebar();
@@ -41,6 +43,7 @@ protected:
 
     Group makeRow(const char* title, float height, float titleWidth);
     CCNode* makeToggleRow(const char* id, const char* title, bool on);
+    CCNode* makeTpsRow();
     CCNode* makeSectionRow(const char* title);
     CCNode* makeMacroRow(const char* name);
     CCNode* makeKeybindRow(const char* title, const char* saveId, enumKeyCodes def);
@@ -52,6 +55,9 @@ protected:
     void onMode(CCObject* sender);
     void onTab(CCObject* sender);
     void onToggleOption(CCObject* sender);
+    void onTpsToggle(CCObject* sender);
+    void onTpsAdjust(CCObject* sender);
+    void onTpsInfo(CCObject* sender);
     void onAddMacro(CCObject* sender);
     void onRefreshMacros(CCObject* sender);
     void onMacroOptions(CCObject* sender);

@@ -10,9 +10,43 @@
 	"name": "ToastyReplay-Lite",
 	"version": "v1.0.0",
 	"developer": "Toastexgd",
-	"description": "ToastyReplay-Lite the official parent release of ToastyReplay, built from the ground up, with accuracy and performance.",
+	"description": "A lightweight version of ToastyReplay with a native Geometry Dash interface.",
+	"early-load": true,
+	"tags": [
+		"gameplay",
+		"utility",
+		"cheat",
+		"offline"
+	],
+	"links": {
+		"source": "https://github.com/ToastexGD/ToastyReplay-Lite"
+	},
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
+	},
+	"settings": {
+		"tps-bypass": {
+			"type": "bool",
+			"name": "TPS Bypass",
+			"description": "Runs gameplay physics at the selected TPS. Use only one TPS bypass at a time.",
+			"default": false
+		},
+		"tps-rate": {
+			"type": "int",
+			"name": "TPS",
+			"description": "Higher values increase physics resolution and CPU use. Input precision depends on the input system.",
+			"default": 240,
+			"min": 240,
+			"max": 1000000,
+			"control": {
+				"arrows": true,
+				"arrow-step": 60,
+				"big-arrows": true,
+				"big-arrow-step": 1000,
+				"slider": false,
+				"input": true
+			}
+		}
 	},
 	"resources": {
 		"files": [

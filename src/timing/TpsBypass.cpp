@@ -1,0 +1,168 @@
+#include "TpsBypass.hpp"
+#include "StepPlanner.hpp"
+#include "TpsPatch.hpp"
+
+#include <Geode/loader/SettingV3.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
+#include <Geode/modify/PlayLayer.hpp>
+#include <algorithm>
+#include <bit>
+#include <cmath>
+#include <limits>
+
+using namespace geode::prelude;
+
+namespace {
+    bool s_enabled = false;
+    int64_t s_rate = toasty::tps::Minimum;
+
+    int64_t boundedRate(int64_t value) {
+        return std::clamp<int64_t>(value, toasty::tps::Minimum, toasty::tps::Maximum);
+    }
+
+    bool customTimingActive() {
+        return toasty::tps::patch::interceptsTicks();
+    }
+}
+
+namespace toasty::tps {
+    bool available() {
+        return patch::available();
+    }
+
+    bool enabled() {
+        return s_enabled && patch::available();
+    }
+
+    bool setEnabled(bool value) {
+        if (value && !patch::available()) return false;
+        if (!patch::setEnabled(value)) return false;
+        s_enabled = value;
+        if (Mod::get()->getSettingValue<bool>("tps-bypass") != value) {
+            Mod::get()->setSettingValue<bool>("tps-bypass", value);
+        }
+        return true;
+    }
+
+    int64_t rate() {
+        return s_rate;
+    }
+
+    void setRate(int64_t value) {
+        auto bounded = boundedRate(value);
+        s_rate = bounded;
+        patch::setRate(bounded);
+        if (Mod::get()->getSettingValue<int64_t>("tps-rate") != bounded) {
+            Mod::get()->setSettingValue<int64_t>("tps-rate", bounded);
+        }
+    }
+
+    std::string const& unavailableReason() {
+        return patch::error();
+    }
+}
+
+class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
+    struct Fields {
+        toasty::timing::StepPlanner planner;
+        bool customDelta = false;
+        double delta = 0.0;
+    };
+
+    double getModifiedDelta(float dt) {
+        if (m_fields->customDelta) return m_fields->delta;
+        return GJBaseGameLayer::getModifiedDelta(dt);
+    }
+
+    void update(float dt) override {
+        auto active = customTimingActive();
+        auto target = s_enabled ? s_rate : toasty::tps::Minimum;
+        auto timeWarp = std::min(static_cast<double>(m_gameState.m_timeWarp), 1.0);
+
+        if (!active || !std::isfinite(dt) || dt < 0.f || !std::isfinite(timeWarp) || timeWarp <= 0.0) {
+            m_fields->planner.reset();
+            m_fields->customDelta = false;
+            if (toasty::tps::patch::interceptsTicks()) toasty::tps::patch::setExpected(1);
+            GJBaseGameLayer::update(dt);
+            return;
+        }
+
+        if (m_resumeTimer > 0) {
+            m_fields->planner.reset();
+            m_fields->customDelta = false;
+            toasty::tps::patch::setExpected(1);
+            GJBaseGameLayer::update(dt);
+            return;
+        }
+
+        auto timestep = timeWarp / static_cast<double>(target);
+        auto plan = m_fields->planner.advance(static_cast<double>(dt), timestep);
+        m_fields->delta = plan.delta;
+        m_fields->customDelta = true;
+        toasty::tps::patch::setExpected(plan.steps);
+#if defined(GEODE_IS_ARM_MAC)
+        auto loadingLayer = m_loadingLayer;
+        m_loadingLayer = std::bit_cast<GJGameLoadingLayer*>(1.0 / static_cast<double>(target));
+#endif
+        GJBaseGameLayer::update(static_cast<float>(plan.delta));
+#if defined(GEODE_IS_ARM_MAC)
+        m_loadingLayer = loadingLayer;
+#endif
+        m_fields->customDelta = false;
+    }
+};
+
+class $modify(ToastyTpsPlayLayer, PlayLayer) {
+    bool needsProgressFix() const {
+        return s_enabled && s_rate != toasty::tps::Minimum && m_level && m_level->m_timestamp > 0;
+    }
+
+    unsigned int correctedProgress() const {
+        auto ticks = std::round(std::max(0.0, m_gameState.m_levelTime) * 480.0);
+        return static_cast<unsigned int>(std::min(
+            ticks,
+            static_cast<double>(std::numeric_limits<unsigned int>::max())
+        ));
+    }
+
+    void updateProgressbar() {
+        auto original = m_gameState.m_currentProgress;
+        if (needsProgressFix()) m_gameState.m_currentProgress = correctedProgress();
+        PlayLayer::updateProgressbar();
+        m_gameState.m_currentProgress = original;
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) override {
+        auto original = m_gameState.m_currentProgress;
+        if (needsProgressFix()) m_gameState.m_currentProgress = correctedProgress();
+        PlayLayer::destroyPlayer(player, object);
+        m_gameState.m_currentProgress = original;
+    }
+
+    void levelComplete() {
+        auto original = m_gameState.m_commandIndex;
+        if (needsProgressFix()) m_gameState.m_commandIndex = correctedProgress();
+        PlayLayer::levelComplete();
+        m_gameState.m_commandIndex = original;
+    }
+};
+
+$on_mod(Loaded) {
+    toasty::tps::patch::initialize();
+    s_rate = boundedRate(Mod::get()->getSettingValue<int64_t>("tps-rate"));
+    toasty::tps::patch::setRate(s_rate);
+    s_enabled = Mod::get()->getSettingValue<bool>("tps-bypass");
+    if (!toasty::tps::setEnabled(s_enabled)) {
+        s_enabled = false;
+        Mod::get()->setSettingValue<bool>("tps-bypass", false);
+    }
+
+    listenForSettingChanges<bool>("tps-bypass", [](bool value) {
+        if (!toasty::tps::setEnabled(value) && value) {
+            Mod::get()->setSettingValue<bool>("tps-bypass", false);
+        }
+    });
+    listenForSettingChanges<int64_t>("tps-rate", [](int64_t value) {
+        toasty::tps::setRate(value);
+    });
+}

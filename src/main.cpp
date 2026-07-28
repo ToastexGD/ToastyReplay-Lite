@@ -5,7 +5,6 @@
 
 using namespace geode::prelude;
 
-// open menu keybind
 class $modify(ToastyKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
         if (down && !repeat && ToastyMenu::handleKey(key)) return true;
@@ -20,7 +19,6 @@ class $modify(ToastyPause, PauseLayer) {
         auto menu = this->getChildByID("left-button-menu");
         if (!menu) return;
 
-        // toasty menu button
         CCNode* spr = CCSprite::create("MenuIcon.png"_spr);
         if (!spr) spr = ButtonSprite::create("TR", "goldFont.fnt", "GJ_button_04.png", .8f);
 
