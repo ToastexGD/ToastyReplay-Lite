@@ -24,8 +24,8 @@ static void moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer
     ));
 }
 
-static CCScale9Sprite* makeBG(CCSize size, ccColor3B color, GLubyte opacity, bool soft) {
-    auto bg = CCScale9Sprite::create("square02b_001.png");
+static geode::NineSlice* makeBG(CCSize size, ccColor3B color, GLubyte opacity, bool soft) {
+    auto bg = geode::NineSlice::create("square02b_001.png");
     if (soft) {
         bg->setContentSize({ size.width * 2.f, size.height * 2.f });
         bg->setScale(.5f);
@@ -101,7 +101,7 @@ bool ToastyMenu::init() {
             auto node = CCNode::create();
             node->setContentSize({ 98.f, 40.f });
 
-            auto bg = CCScale9Sprite::create(modeTextures[i]);
+            auto bg = geode::NineSlice::create(modeTextures[i]);
             bg->setContentSize(node->getContentSize());
             bg->setPosition({ 49.f, 20.f });
             node->addChild(bg);
@@ -415,7 +415,7 @@ void ToastyMenu::addPageTitle(CCNode* page, const char* title, const char* hint)
     page->addChild(hintLabel);
 }
 
-CCScale9Sprite* ToastyMenu::addPanel(CCNode* page, CCPoint center, CCSize size) {
+geode::NineSlice* ToastyMenu::addPanel(CCNode* page, CCPoint center, CCSize size) {
     auto panel = makeBG(size, PANEL_COLOR, 220, false);
     panel->setPosition(center);
     page->addChild(panel);
