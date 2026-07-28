@@ -231,8 +231,8 @@ namespace {
     void fail(std::string message) {
         s_error = std::move(message);
         s_available = false;
-        if (Mod::get()->getSettingValue<bool>("tps-bypass")) {
-            Mod::get()->setSettingValue<bool>("tps-bypass", false);
+        if (Mod::get()->getSavedValue<bool>("tps-bypass", false)) {
+            Mod::get()->setSavedValue<bool>("tps-bypass", false);
         }
         log::error("TPS bypass unavailable: {}", s_error);
     }
@@ -286,8 +286,8 @@ namespace toasty::tps::patch {
 #endif
 
         s_available = true;
-        setRate(Mod::get()->getSettingValue<int64_t>("tps-rate"));
-        if (!setEnabled(Mod::get()->getSettingValue<bool>("tps-bypass"))) {
+        setRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Minimum));
+        if (!setEnabled(Mod::get()->getSavedValue<bool>("tps-bypass", false))) {
             return false;
         }
         return true;

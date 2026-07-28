@@ -2,7 +2,6 @@
 #include "StepPlanner.hpp"
 #include "TpsPatch.hpp"
 
-#include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <algorithm>
@@ -38,8 +37,8 @@ namespace toasty::tps {
         if (value && !patch::available()) return false;
         if (!patch::setEnabled(value)) return false;
         s_enabled = value;
-        if (Mod::get()->getSettingValue<bool>("tps-bypass") != value) {
-            Mod::get()->setSettingValue<bool>("tps-bypass", value);
+        if (Mod::get()->getSavedValue<bool>("tps-bypass", false) != value) {
+            Mod::get()->setSavedValue<bool>("tps-bypass", value);
         }
         return true;
     }
@@ -52,8 +51,8 @@ namespace toasty::tps {
         auto bounded = boundedRate(value);
         s_rate = bounded;
         patch::setRate(bounded);
-        if (Mod::get()->getSettingValue<int64_t>("tps-rate") != bounded) {
-            Mod::get()->setSettingValue<int64_t>("tps-rate", bounded);
+        if (Mod::get()->getSavedValue<int64_t>("tps-rate", Minimum) != bounded) {
+            Mod::get()->setSavedValue<int64_t>("tps-rate", bounded);
         }
     }
 
@@ -149,20 +148,11 @@ class $modify(ToastyTpsPlayLayer, PlayLayer) {
 
 $on_mod(Loaded) {
     toasty::tps::patch::initialize();
-    s_rate = boundedRate(Mod::get()->getSettingValue<int64_t>("tps-rate"));
+    s_rate = boundedRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Minimum));
     toasty::tps::patch::setRate(s_rate);
-    s_enabled = Mod::get()->getSettingValue<bool>("tps-bypass");
+    s_enabled = Mod::get()->getSavedValue<bool>("tps-bypass", false);
     if (!toasty::tps::setEnabled(s_enabled)) {
         s_enabled = false;
-        Mod::get()->setSettingValue<bool>("tps-bypass", false);
+        Mod::get()->setSavedValue<bool>("tps-bypass", false);
     }
-
-    listenForSettingChanges<bool>("tps-bypass", [](bool value) {
-        if (!toasty::tps::setEnabled(value) && value) {
-            Mod::get()->setSettingValue<bool>("tps-bypass", false);
-        }
-    });
-    listenForSettingChanges<int64_t>("tps-rate", [](int64_t value) {
-        toasty::tps::setRate(value);
-    });
 }

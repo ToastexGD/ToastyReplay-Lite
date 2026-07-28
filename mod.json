@@ -24,30 +24,6 @@
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
 	},
-	"settings": {
-		"tps-bypass": {
-			"type": "bool",
-			"name": "TPS Bypass",
-			"description": "Runs gameplay physics at the selected TPS. Use only one TPS bypass at a time.",
-			"default": false
-		},
-		"tps-rate": {
-			"type": "int",
-			"name": "TPS",
-			"description": "Higher values increase physics resolution and CPU use. Input precision depends on the input system.",
-			"default": 240,
-			"min": 240,
-			"max": 1000000,
-			"control": {
-				"arrows": true,
-				"arrow-step": 60,
-				"big-arrows": true,
-				"big-arrow-step": 1000,
-				"slider": false,
-				"input": true
-			}
-		}
-	},
 	"resources": {
 		"files": [
 			"resources/*.png"
