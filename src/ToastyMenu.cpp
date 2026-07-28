@@ -85,15 +85,18 @@ ToastyMenu::~ToastyMenu() {
 bool ToastyMenu::init() {
     if (!Popup::init(POPUP_W, POPUP_H)) return false;
 
+    // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     this->addHeader();
     this->addSidebar();
 
+    // main page
     {
         auto [page, menu] = this->makePage(TabMain);
         this->addPageTitle(page, "Macro Controls", nullptr);
 
+        // disable, record, play, buttons in the "macro controlls"
         const char* modeNames[3] = { "Disable", "Record", "Play" };
         const char* modeTextures[3] = { "GJ_button_04.png", "GJ_button_06.png", "GJ_button_01.png" };
         const char* modeIds[3] = { "mode-disable", "mode-record", "mode-play" };
@@ -156,6 +159,7 @@ bool ToastyMenu::init() {
         this->updateModes();
     }
 
+    // macros page
     {
         auto [page, menu] = this->makePage(TabMacros);
         this->addPageTitle(page, "Macro List", nullptr);
@@ -181,7 +185,7 @@ bool ToastyMenu::init() {
         const char* macroNames[] = {
             "diddy??????????", "wave spam", "SAKUPEN CIRCLES XXXX", "sync test",
             "sakupen diddy", "old", "full run backup"
-        };
+        }; // honestly this is just temperary untill someone sets up the macro recording system along with whatever is needed to be implemented related to that
         for (auto name : macroNames) {
             scroll->m_contentLayer->addChild(this->makeMacroRow(name));
         }
@@ -189,6 +193,7 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
+    // settings page
     {
         auto page = this->makePage(TabSettings).node;
         this->addPageTitle(page, "Settings", nullptr);
@@ -196,6 +201,7 @@ bool ToastyMenu::init() {
         this->addPanel(page, { PANEL_X, 129.f }, { PANEL_W, 214.f });
         auto scroll = this->addScroll(page, TabSettings, { ROW_X, 26.f }, { ROW_W, 206.f });
 
+        // menu scale is live so the popup can be sized before anything else exists
         auto scaleRow = this->makeRow("Menu Scale", ROW_H, 95.f);
         scaleRow.node->setID("menu-scale");
 
@@ -250,6 +256,7 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
+    // keybinds page
     {
         auto page = this->makePage(TabKeybinds).node;
         this->addPageTitle(page, "Keybinds", "Windows & macOS");
@@ -267,6 +274,7 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
+    // about page
     {
         auto page = this->makePage(TabAbout).node;
         this->addPageTitle(page, "About", nullptr);
@@ -624,6 +632,7 @@ void ToastyMenu::show() {
     m_mainLayer->setScale(0.f);
     m_mainLayer->runAction(CCEaseElasticOut::create(CCScaleTo::create(.5f, scale), .6f));
 
+    // gd hides the cursor in levels
     PlatformToolbox::showCursor();
 }
 
@@ -806,6 +815,7 @@ void ToastyMenu::onClose(CCObject* sender) {
     if (s_instance == this) s_instance = nullptr;
     s_captureBtn = nullptr;
 
+    // rehide cursor during gameplay
     if (PlayLayer::get()) {
         auto scene = CCDirector::sharedDirector()->getRunningScene();
         if (scene && !scene->getChildByType<PauseLayer>(0)) {
@@ -844,6 +854,7 @@ bool RenamePopup::init(CCLabelBMFont* target) {
     m_target = target;
     this->setTitle("Rename Macro");
 
+    // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     m_input = TextInput::create(230.f, "Macro name");
