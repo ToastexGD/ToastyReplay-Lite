@@ -412,8 +412,11 @@ namespace toasty::replay::ttrl {
 
         auto inputSize = reader.readVarint();
         if (!inputSize) return std::unexpected(inputSize.error());
-        if (*inputSize > MaximumInputSize || *inputSize > reader.remaining()) {
+        if (*inputSize > MaximumInputSize) {
             return std::unexpected(failure(CodecError::FileTooLarge, reader.position()));
+        }
+        if (*inputSize > reader.remaining()) {
+            return std::unexpected(failure(CodecError::Truncated, reader.position()));
         }
 
         auto inputSpan = reader.readSpan(static_cast<size_t>(*inputSize));
@@ -447,8 +450,11 @@ namespace toasty::replay::ttrl {
 
             auto frameFixSize = reader.readVarint();
             if (!frameFixSize) return std::unexpected(frameFixSize.error());
-            if (*frameFixSize > MaximumFrameFixSize || *frameFixSize > reader.remaining()) {
+            if (*frameFixSize > MaximumFrameFixSize) {
                 return std::unexpected(failure(CodecError::FileTooLarge, reader.position()));
+            }
+            if (*frameFixSize > reader.remaining()) {
+                return std::unexpected(failure(CodecError::Truncated, reader.position()));
             }
 
             auto frameFixSpan = reader.readSpan(static_cast<size_t>(*frameFixSize));
