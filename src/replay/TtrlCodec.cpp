@@ -9,6 +9,8 @@
 
 namespace {
     using toasty::replay::FrameFix;
+    using toasty::replay::InputButton;
+    using toasty::replay::InputPlayer;
     using toasty::replay::Replay;
     using toasty::replay::ttrl::CodecError;
     using toasty::replay::ttrl::CodecFailure;
@@ -16,7 +18,8 @@ namespace {
     constexpr std::array<uint8_t, 4> Magic = { 'T', 'T', 'R', 'L' };
     constexpr uint8_t Version = 1;
     constexpr uint8_t FrameFixFlag = 1;
-    constexpr uint8_t KnownFlags = FrameFixFlag;
+    constexpr uint8_t InputChannelsFlag = 2;
+    constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag;
     constexpr uint8_t FrameFixSchema = 1;
     constexpr size_t MinimumFileSize = 25;
     constexpr size_t MaximumFileSize = 64 * 1024 * 1024;
@@ -25,6 +28,29 @@ namespace {
 
     CodecFailure failure(CodecError error, size_t offset) {
         return { error, offset };
+    }
+
+    bool validInputButton(InputButton button) {
+        return
+            button == InputButton::Jump ||
+            button == InputButton::Left ||
+            button == InputButton::Right;
+    }
+
+    bool validInputPlayer(InputPlayer player) {
+        return player == InputPlayer::Player1 || player == InputPlayer::Player2;
+    }
+
+    bool usesInputChannels(Replay const& replay) {
+        return std::any_of(
+            replay.inputs.begin(),
+            replay.inputs.end(),
+            [](auto const& event) {
+                return
+                    event.button != InputButton::Jump ||
+                    event.player != InputPlayer::Player1;
+            }
+        );
     }
 
     void appendVarint(std::vector<uint8_t>& bytes, uint64_t value) {
@@ -224,7 +250,7 @@ namespace {
         };
     }
 
-    std::expected<void, CodecFailure> validate(Replay const& replay) {
+    std::expected<void, CodecFailure> validate(Replay const& replay, bool inputChannels) {
         if (
             replay.tps.numerator == 0 ||
             replay.tps.denominator == 0 ||
@@ -240,13 +266,17 @@ namespace {
         uint64_t previousTick = 0;
         for (size_t index = 0; index < replay.inputs.size(); ++index) {
             auto const& event = replay.inputs[index];
+            if (!validInputButton(event.button) || !validInputPlayer(event.player)) {
+                return std::unexpected(failure(CodecError::InvalidInput, index));
+            }
             if (index != 0 && event.tick < previousTick) {
                 return std::unexpected(failure(CodecError::InvalidInputOrder, index));
             }
             if (event.tick > replay.durationTicks) {
                 return std::unexpected(failure(CodecError::TickPastDuration, index));
             }
-            if (event.tick - previousTick > (std::numeric_limits<uint64_t>::max() >> 1)) {
+            auto shift = inputChannels ? 4 : 1;
+            if (event.tick - previousTick > (std::numeric_limits<uint64_t>::max() >> shift)) {
                 return std::unexpected(failure(CodecError::TickOverflow, index));
             }
             previousTick = event.tick;
@@ -276,7 +306,8 @@ namespace {
 
 namespace toasty::replay::ttrl {
     EncodeResult encode(Replay const& replay) {
-        auto validation = validate(replay);
+        auto inputChannels = usesInputChannels(replay);
+        auto validation = validate(replay, inputChannels);
         if (!validation) return std::unexpected(validation.error());
 
         std::vector<uint8_t> inputBytes;
@@ -286,7 +317,15 @@ namespace toasty::replay::ttrl {
                 return std::unexpected(failure(CodecError::FileTooLarge, inputBytes.size()));
             }
             auto delta = event.tick - previousTick;
-            appendVarint(inputBytes, (delta << 1) | static_cast<uint64_t>(event.pressed));
+            if (inputChannels) {
+                auto state =
+                    ((static_cast<uint64_t>(event.button) - 1) << 2) |
+                    (event.player == InputPlayer::Player2 ? 2 : 0) |
+                    static_cast<uint64_t>(event.pressed);
+                appendVarint(inputBytes, (delta << 4) | state);
+            } else {
+                appendVarint(inputBytes, (delta << 1) | static_cast<uint64_t>(event.pressed));
+            }
             previousTick = event.tick;
         }
 
@@ -310,7 +349,10 @@ namespace toasty::replay::ttrl {
         std::vector<uint8_t> bytes;
         bytes.insert(bytes.end(), Magic.begin(), Magic.end());
         bytes.push_back(Version);
-        bytes.push_back(replay.frameFixes.empty() ? 0 : FrameFixFlag);
+        uint8_t flags = 0;
+        if (!replay.frameFixes.empty()) flags |= FrameFixFlag;
+        if (inputChannels) flags |= InputChannelsFlag;
+        bytes.push_back(flags);
         appendVarint(bytes, replay.tps.numerator);
         appendVarint(bytes, replay.tps.denominator);
         appendVarint(bytes, replay.gameVersion);
@@ -371,6 +413,7 @@ namespace toasty::replay::ttrl {
         if ((*flags & ~KnownFlags) != 0) {
             return std::unexpected(failure(CodecError::UnsupportedFlags, reader.position() - 1));
         }
+        auto inputChannels = (*flags & InputChannelsFlag) != 0;
 
         Replay replay;
 
@@ -429,12 +472,27 @@ namespace toasty::replay::ttrl {
             auto event = inputReader.readVarint();
             if (!event) return std::unexpected(event.error());
 
-            auto tick = checkedTick(previousTick, *event >> 1, replay.durationTicks, offset);
+            auto state = inputChannels ? (*event & 0xf) : (*event & 1);
+            auto shift = inputChannels ? 4 : 1;
+            auto tick = checkedTick(previousTick, *event >> shift, replay.durationTicks, offset);
             if (!tick) return std::unexpected(tick.error());
+
+            auto button = InputButton::Jump;
+            auto player = InputPlayer::Player1;
+            if (inputChannels) {
+                auto buttonValue = (state >> 2) + 1;
+                if (buttonValue > static_cast<uint64_t>(InputButton::Right)) {
+                    return std::unexpected(failure(CodecError::InvalidInput, offset));
+                }
+                button = static_cast<InputButton>(buttonValue);
+                if ((state & 2) != 0) player = InputPlayer::Player2;
+            }
 
             replay.inputs.push_back({
                 .tick = *tick,
-                .pressed = (*event & 1) != 0
+                .button = button,
+                .player = player,
+                .pressed = (state & 1) != 0
             });
             previousTick = *tick;
         }

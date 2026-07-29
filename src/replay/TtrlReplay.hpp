@@ -11,8 +11,21 @@ namespace toasty::replay {
         bool operator==(TpsRate const&) const = default;
     };
 
+    enum class InputButton : uint8_t {
+        Jump = 1,
+        Left = 2,
+        Right = 3
+    };
+
+    enum class InputPlayer : uint8_t {
+        Player1 = 1,
+        Player2 = 2
+    };
+
     struct InputEvent {
         uint64_t tick = 0;
+        InputButton button = InputButton::Jump;
+        InputPlayer player = InputPlayer::Player1;
         bool pressed = false;
 
         bool operator==(InputEvent const&) const = default;

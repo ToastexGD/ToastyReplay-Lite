@@ -21,6 +21,7 @@ namespace toasty::replay::ttrl {
         InvalidVarint,
         InvalidTps,
         InvalidGameVersion,
+        InvalidInput,
         InvalidInputOrder,
         InvalidFrameFix,
         TickOverflow,
