@@ -15,6 +15,10 @@ namespace {
     using toasty::replay::TpsRate;
     using toasty::replay::ttrl::CodecError;
     using toasty::replay::ttrl::CodecFailure;
+    using toasty::replay::ttrl::MaximumFileSize;
+    using toasty::replay::ttrl::MaximumFrameFixes;
+    using toasty::replay::ttrl::MaximumInputEvents;
+    using toasty::replay::ttrl::MaximumInputSize;
 
     constexpr std::array<uint8_t, 4> Magic = { 'T', 'T', 'R', 'L' };
     constexpr uint8_t Version = 1;
@@ -23,9 +27,8 @@ namespace {
     constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag;
     constexpr uint8_t FrameFixSchema = 1;
     constexpr size_t MinimumFileSize = 25;
-    constexpr size_t MaximumFileSize = 64 * 1024 * 1024;
-    constexpr size_t MaximumInputSize = 8 * 1024 * 1024;
     constexpr size_t MaximumFrameFixSize = MaximumFileSize - MaximumInputSize;
+    constexpr size_t MinimumFrameFixRecordSize = 21;
 
     CodecFailure failure(CodecError error, size_t offset) {
         return { error, offset };
@@ -260,6 +263,14 @@ namespace {
         if (replay.gameVersion == 0) {
             return std::unexpected(failure(CodecError::InvalidGameVersion, 0));
         }
+        if (replay.inputs.size() > MaximumInputEvents) {
+            return std::unexpected(failure(CodecError::TooManyInputs, replay.inputs.size()));
+        }
+        if (replay.frameFixes.size() > MaximumFrameFixes) {
+            return std::unexpected(
+                failure(CodecError::TooManyFrameFixes, replay.frameFixes.size())
+            );
+        }
 
         uint64_t previousTick = 0;
         for (size_t index = 0; index < replay.inputs.size(); ++index) {
@@ -466,6 +477,11 @@ namespace toasty::replay::ttrl {
 
         uint64_t previousTick = 0;
         while (!inputReader.finished()) {
+            if (replay.inputs.size() == MaximumInputEvents) {
+                return std::unexpected(
+                    failure(CodecError::TooManyInputs, inputReader.position())
+                );
+            }
             auto offset = inputReader.position();
             auto event = inputReader.readVarint();
             if (!event) return std::unexpected(event.error());
@@ -519,7 +535,12 @@ namespace toasty::replay::ttrl {
 
             auto count = frameFixReader.readVarint();
             if (!count) return std::unexpected(count.error());
-            if (*count > frameFixReader.remaining()) {
+            if (*count > MaximumFrameFixes) {
+                return std::unexpected(
+                    failure(CodecError::TooManyFrameFixes, frameFixReader.position())
+                );
+            }
+            if (*count > frameFixReader.remaining() / MinimumFrameFixRecordSize) {
                 return std::unexpected(
                     failure(CodecError::InvalidFrameFix, frameFixReader.position())
                 );
@@ -550,5 +571,31 @@ namespace toasty::replay::ttrl {
         }
 
         return replay;
+    }
+
+    std::string_view errorMessage(CodecError error) {
+        switch (error) {
+            case CodecError::FileTooSmall: return "The replay file is too small";
+            case CodecError::FileTooLarge: return "The replay file is too large";
+            case CodecError::ChecksumMismatch: return "The replay checksum does not match";
+            case CodecError::InvalidMagic: return "The file is not a TTRL replay";
+            case CodecError::UnsupportedVersion: return "The replay version is not supported";
+            case CodecError::UnsupportedFlags: return "The replay uses unsupported features";
+            case CodecError::UnsupportedFrameFixSchema:
+                return "The frame fix format is not supported";
+            case CodecError::Truncated: return "The replay file is incomplete";
+            case CodecError::InvalidVarint: return "The replay contains an invalid number";
+            case CodecError::InvalidTps: return "The replay TPS is invalid";
+            case CodecError::InvalidGameVersion: return "The game version is invalid";
+            case CodecError::InvalidInput: return "The replay contains an invalid input";
+            case CodecError::InvalidInputOrder: return "The replay inputs are out of order";
+            case CodecError::InvalidFrameFix: return "The replay contains an invalid frame fix";
+            case CodecError::TooManyInputs: return "The replay contains too many inputs";
+            case CodecError::TooManyFrameFixes: return "The replay contains too many frame fixes";
+            case CodecError::TickOverflow: return "A replay tick is too large";
+            case CodecError::TickOutsideReplay: return "A replay tick is outside the replay";
+            case CodecError::TrailingData: return "The replay contains unexpected trailing data";
+        }
+        return "The replay is invalid";
     }
 }

@@ -6,9 +6,15 @@
 #include <cstdint>
 #include <expected>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace toasty::replay::ttrl {
+    constexpr size_t MaximumFileSize = 64 * 1024 * 1024;
+    constexpr size_t MaximumInputSize = 8 * 1024 * 1024;
+    constexpr size_t MaximumInputEvents = 1024 * 1024;
+    constexpr size_t MaximumFrameFixes = 1024 * 1024;
+
     enum class CodecError {
         FileTooSmall,
         FileTooLarge,
@@ -24,6 +30,8 @@ namespace toasty::replay::ttrl {
         InvalidInput,
         InvalidInputOrder,
         InvalidFrameFix,
+        TooManyInputs,
+        TooManyFrameFixes,
         TickOverflow,
         TickOutsideReplay,
         TrailingData
@@ -41,4 +49,5 @@ namespace toasty::replay::ttrl {
 
     EncodeResult encode(Replay const& replay);
     DecodeResult decode(std::span<uint8_t const> bytes);
+    std::string_view errorMessage(CodecError error);
 }
