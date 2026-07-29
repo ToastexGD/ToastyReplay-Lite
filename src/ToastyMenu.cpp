@@ -328,6 +328,8 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
+    static_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))->toggle(Mod::get()->getSavedValue<bool>("noclip",false));
+
     this->updateTabs();
     this->updatePages();
 
@@ -474,7 +476,7 @@ CCNode* ToastyMenu::makeToggleRow(const char* id, const char* title, bool on) {
     auto toggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(ToastyMenu::onToggleOption), .6f);
     toggle->setPosition({ ROW_W - 18.f, ROW_H / 2.f });
     toggle->toggle(on);
-    toggle->setID("toggle");
+    toggle->setID(std::string(id) + "-toggle");
     row.menu->addChild(toggle);
     return row.node;
 }
@@ -812,6 +814,8 @@ void ToastyMenu::onBindKey(CCObject* sender) {
 }
 
 void ToastyMenu::onClose(CCObject* sender) {
+    Mod::get()->setSavedValue("noclip", static_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))->isToggled());
+
     if (s_instance == this) s_instance = nullptr;
     s_captureBtn = nullptr;
 
