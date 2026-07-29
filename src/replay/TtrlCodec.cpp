@@ -12,6 +12,7 @@ namespace {
     using toasty::replay::InputButton;
     using toasty::replay::InputPlayer;
     using toasty::replay::Replay;
+    using toasty::replay::TpsRate;
     using toasty::replay::ttrl::CodecError;
     using toasty::replay::ttrl::CodecFailure;
 
@@ -197,7 +198,7 @@ namespace {
     std::expected<uint64_t, CodecFailure> checkedTick(
         uint64_t previous,
         uint64_t delta,
-        uint64_t duration,
+        uint64_t tickCount,
         size_t offset
     ) {
         if (delta > std::numeric_limits<uint64_t>::max() - previous) {
@@ -205,8 +206,8 @@ namespace {
         }
 
         auto tick = previous + delta;
-        if (tick > duration) {
-            return std::unexpected(failure(CodecError::TickPastDuration, offset));
+        if (tick >= tickCount) {
+            return std::unexpected(failure(CodecError::TickOutsideReplay, offset));
         }
         return tick;
     }
@@ -214,13 +215,13 @@ namespace {
     std::expected<FrameFix, CodecFailure> readFrameFix(
         Reader& reader,
         uint64_t previousTick,
-        uint64_t duration
+        uint64_t tickCount
     ) {
         auto offset = reader.position();
         auto delta = reader.readVarint();
         if (!delta) return std::unexpected(delta.error());
 
-        auto tick = checkedTick(previousTick, *delta, duration, offset);
+        auto tick = checkedTick(previousTick, *delta, tickCount, offset);
         if (!tick) return std::unexpected(tick.error());
 
         auto x = reader.readFloat();
@@ -242,7 +243,7 @@ namespace {
         }
 
         return FrameFix {
-            .tick = *tick,
+            .afterTick = *tick,
             .x = *x,
             .y = *y,
             .rotation = *rotation,
@@ -250,12 +251,9 @@ namespace {
         };
     }
 
-    std::expected<void, CodecFailure> validate(Replay const& replay, bool inputChannels) {
-        if (
-            replay.tps.numerator == 0 ||
-            replay.tps.denominator == 0 ||
-            std::gcd(replay.tps.numerator, replay.tps.denominator) != 1
-        ) {
+    std::expected<TpsRate, CodecFailure> validate(Replay const& replay, bool inputChannels) {
+        auto tps = replay.tps.normalized();
+        if (!tps) {
             return std::unexpected(failure(CodecError::InvalidTps, 0));
         }
 
@@ -269,27 +267,29 @@ namespace {
             if (!validInputButton(event.button) || !validInputPlayer(event.player)) {
                 return std::unexpected(failure(CodecError::InvalidInput, index));
             }
-            if (index != 0 && event.tick < previousTick) {
+            if (index != 0 && event.beforeTick < previousTick) {
                 return std::unexpected(failure(CodecError::InvalidInputOrder, index));
             }
-            if (event.tick > replay.durationTicks) {
-                return std::unexpected(failure(CodecError::TickPastDuration, index));
+            if (event.beforeTick >= replay.tickCount) {
+                return std::unexpected(failure(CodecError::TickOutsideReplay, index));
             }
             auto shift = inputChannels ? 4 : 1;
-            if (event.tick - previousTick > (std::numeric_limits<uint64_t>::max() >> shift)) {
+            if (event.beforeTick - previousTick > (std::numeric_limits<uint64_t>::max() >> shift)) {
                 return std::unexpected(failure(CodecError::TickOverflow, index));
             }
-            previousTick = event.tick;
+            previousTick = event.beforeTick;
         }
 
         previousTick = 0;
         for (size_t index = 0; index < replay.frameFixes.size(); ++index) {
             auto const& fix = replay.frameFixes[index];
-            if (index != 0 && fix.tick < previousTick) {
+            if (index != 0 && fix.afterTick < previousTick) {
                 return std::unexpected(failure(CodecError::InvalidFrameFix, index));
             }
+            if (fix.afterTick >= replay.tickCount) {
+                return std::unexpected(failure(CodecError::TickOutsideReplay, index));
+            }
             if (
-                fix.tick > replay.durationTicks ||
                 !std::isfinite(fix.x) ||
                 !std::isfinite(fix.y) ||
                 !std::isfinite(fix.rotation) ||
@@ -297,18 +297,18 @@ namespace {
             ) {
                 return std::unexpected(failure(CodecError::InvalidFrameFix, index));
             }
-            previousTick = fix.tick;
+            previousTick = fix.afterTick;
         }
 
-        return {};
+        return *tps;
     }
 }
 
 namespace toasty::replay::ttrl {
     EncodeResult encode(Replay const& replay) {
         auto inputChannels = usesInputChannels(replay);
-        auto validation = validate(replay, inputChannels);
-        if (!validation) return std::unexpected(validation.error());
+        auto tps = validate(replay, inputChannels);
+        if (!tps) return std::unexpected(tps.error());
 
         std::vector<uint8_t> inputBytes;
         uint64_t previousTick = 0;
@@ -316,7 +316,7 @@ namespace toasty::replay::ttrl {
             if (inputBytes.size() > MaximumInputSize - 10) {
                 return std::unexpected(failure(CodecError::FileTooLarge, inputBytes.size()));
             }
-            auto delta = event.tick - previousTick;
+            auto delta = event.beforeTick - previousTick;
             if (inputChannels) {
                 auto state =
                     ((static_cast<uint64_t>(event.button) - 1) << 2) |
@@ -326,7 +326,7 @@ namespace toasty::replay::ttrl {
             } else {
                 appendVarint(inputBytes, (delta << 1) | static_cast<uint64_t>(event.pressed));
             }
-            previousTick = event.tick;
+            previousTick = event.beforeTick;
         }
 
         std::vector<uint8_t> frameFixBytes;
@@ -337,12 +337,12 @@ namespace toasty::replay::ttrl {
                 if (frameFixBytes.size() > MaximumFrameFixSize - 30) {
                     return std::unexpected(failure(CodecError::FileTooLarge, frameFixBytes.size()));
                 }
-                appendVarint(frameFixBytes, fix.tick - previousTick);
+                appendVarint(frameFixBytes, fix.afterTick - previousTick);
                 appendFloat(frameFixBytes, fix.x);
                 appendFloat(frameFixBytes, fix.y);
                 appendFloat(frameFixBytes, fix.rotation);
                 appendDouble(frameFixBytes, fix.verticalVelocity);
-                previousTick = fix.tick;
+                previousTick = fix.afterTick;
             }
         }
 
@@ -353,13 +353,13 @@ namespace toasty::replay::ttrl {
         if (!replay.frameFixes.empty()) flags |= FrameFixFlag;
         if (inputChannels) flags |= InputChannelsFlag;
         bytes.push_back(flags);
-        appendVarint(bytes, replay.tps.numerator);
-        appendVarint(bytes, replay.tps.denominator);
+        appendVarint(bytes, tps->numerator);
+        appendVarint(bytes, tps->denominator);
         appendVarint(bytes, replay.gameVersion);
         appendVarint(bytes, replay.levelId);
         appendVarint(bytes, replay.levelRevision);
         append64(bytes, replay.levelFingerprint);
-        appendVarint(bytes, replay.durationTicks);
+        appendVarint(bytes, replay.tickCount);
         appendVarint(bytes, inputBytes.size());
         bytes.insert(bytes.end(), inputBytes.begin(), inputBytes.end());
 
@@ -421,14 +421,12 @@ namespace toasty::replay::ttrl {
         if (!numerator) return std::unexpected(numerator.error());
         auto denominator = reader.readVarint();
         if (!denominator) return std::unexpected(denominator.error());
-        if (
-            *numerator == 0 ||
-            *denominator == 0 ||
-            std::gcd(*numerator, *denominator) != 1
-        ) {
+        auto tps = TpsRate { *numerator, *denominator };
+        auto normalizedTps = tps.normalized();
+        if (!normalizedTps || *normalizedTps != tps) {
             return std::unexpected(failure(CodecError::InvalidTps, reader.position()));
         }
-        replay.tps = { *numerator, *denominator };
+        replay.tps = tps;
 
         auto gameVersion = reader.readVarint();
         if (!gameVersion) return std::unexpected(gameVersion.error());
@@ -449,9 +447,9 @@ namespace toasty::replay::ttrl {
         if (!levelFingerprint) return std::unexpected(levelFingerprint.error());
         replay.levelFingerprint = *levelFingerprint;
 
-        auto duration = reader.readVarint();
-        if (!duration) return std::unexpected(duration.error());
-        replay.durationTicks = *duration;
+        auto tickCount = reader.readVarint();
+        if (!tickCount) return std::unexpected(tickCount.error());
+        replay.tickCount = *tickCount;
 
         auto inputSize = reader.readVarint();
         if (!inputSize) return std::unexpected(inputSize.error());
@@ -474,7 +472,7 @@ namespace toasty::replay::ttrl {
 
             auto state = inputChannels ? (*event & 0xf) : (*event & 1);
             auto shift = inputChannels ? 4 : 1;
-            auto tick = checkedTick(previousTick, *event >> shift, replay.durationTicks, offset);
+            auto tick = checkedTick(previousTick, *event >> shift, replay.tickCount, offset);
             if (!tick) return std::unexpected(tick.error());
 
             auto button = InputButton::Jump;
@@ -489,7 +487,7 @@ namespace toasty::replay::ttrl {
             }
 
             replay.inputs.push_back({
-                .tick = *tick,
+                .beforeTick = *tick,
                 .button = button,
                 .player = player,
                 .pressed = (state & 1) != 0
@@ -533,10 +531,10 @@ namespace toasty::replay::ttrl {
                 auto frameFix = readFrameFix(
                     frameFixReader,
                     previousTick,
-                    replay.durationTicks
+                    replay.tickCount
                 );
                 if (!frameFix) return std::unexpected(frameFix.error());
-                previousTick = frameFix->tick;
+                previousTick = frameFix->afterTick;
                 replay.frameFixes.push_back(*frameFix);
             }
 

@@ -25,7 +25,7 @@ namespace toasty::replay::ttrl {
         InvalidInputOrder,
         InvalidFrameFix,
         TickOverflow,
-        TickPastDuration,
+        TickOutsideReplay,
         TrailingData
     };
 
