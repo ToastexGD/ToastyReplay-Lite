@@ -71,20 +71,22 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
     };
 
     double getModifiedDelta(float dt) {
-        if (m_fields->customDelta)
-            return m_fields->delta;
+        auto fields = m_fields.self();
+        if (fields->customDelta)
+            return fields->delta;
         return GJBaseGameLayer::getModifiedDelta(dt);
     }
 
     void update(float dt) override {
+        auto fields = m_fields.self();
         auto active = customTimingActive();
         auto target = s_enabled ? s_rate : toasty::tps::Minimum;
         auto timeWarp = std::min(static_cast<double>(m_gameState.m_timeWarp), 1.0);
 
         if (!active || !std::isfinite(dt) || dt < 0.f || !std::isfinite(timeWarp) ||
             timeWarp <= 0.0) {
-            m_fields->planner.reset();
-            m_fields->customDelta = false;
+            fields->planner.reset();
+            fields->customDelta = false;
             if (toasty::tps::patch::interceptsTicks())
                 toasty::tps::patch::setExpected(1);
             GJBaseGameLayer::update(dt);
@@ -92,17 +94,17 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
         }
 
         if (m_resumeTimer > 0) {
-            m_fields->planner.reset();
-            m_fields->customDelta = false;
+            fields->planner.reset();
+            fields->customDelta = false;
             toasty::tps::patch::setExpected(1);
             GJBaseGameLayer::update(dt);
             return;
         }
 
         auto timestep = timeWarp / static_cast<double>(target);
-        auto plan = m_fields->planner.advance(static_cast<double>(dt), timestep);
-        m_fields->delta = plan.delta;
-        m_fields->customDelta = true;
+        auto plan = fields->planner.advance(static_cast<double>(dt), timestep);
+        fields->delta = plan.delta;
+        fields->customDelta = true;
         toasty::tps::patch::setExpected(plan.steps);
 #if defined(GEODE_IS_ARM_MAC)
         auto loadingLayer = m_loadingLayer;
@@ -112,7 +114,7 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
 #if defined(GEODE_IS_ARM_MAC)
         m_loadingLayer = loadingLayer;
 #endif
-        m_fields->customDelta = false;
+        fields->customDelta = false;
     }
 };
 
