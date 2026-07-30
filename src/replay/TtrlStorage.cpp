@@ -1,9 +1,15 @@
 #include "TtrlStorage.hpp"
 
+#include <asp/fs.hpp>
+#include <asp/iter.hpp>
+#include <Geode/utils/file.hpp>
+#include <Geode/utils/string.hpp>
+#include <Geode/utils/StringBuffer.hpp>
+
 #include <algorithm>
-#include <cctype>
-#include <fstream>
 #include <utility>
+
+using namespace geode::prelude;
 
 namespace {
     using toasty::replay::ttrl::CodecFailure;
@@ -14,341 +20,256 @@ namespace {
     constexpr size_t MaximumReplayName = 80;
     constexpr size_t MaximumNameAttempts = 10000;
 
-    StorageFailure failure(
-        StorageError error,
-        std::string detail = {},
-        std::optional<CodecFailure> codec = std::nullopt
-    ) {
-        return { error, std::move(detail), codec };
+    impl::ErrContainer<StorageFailure> failure(StorageError error,
+                                               std::string detail = {},
+                                               std::optional<CodecFailure> codec = std::nullopt) {
+        return Err(StorageFailure{error, std::move(detail), codec});
     }
 
     bool endsWithTtrl(std::string_view value) {
-        if (value.size() < 5) return false;
-        auto extension = value.substr(value.size() - 5);
-        return
-            extension[0] == '.' &&
-            std::tolower(static_cast<unsigned char>(extension[1])) == 't' &&
-            std::tolower(static_cast<unsigned char>(extension[2])) == 't' &&
-            std::tolower(static_cast<unsigned char>(extension[3])) == 'r' &&
-            std::tolower(static_cast<unsigned char>(extension[4])) == 'l';
+        if (value.size() < 5)
+            return false;
+        return utils::string::equalsIgnoreCase(value.substr(value.size() - 5), ".ttrl");
     }
 
-    bool reservedName(std::string const& value) {
-        std::string lower;
-        lower.reserve(value.size());
-        for (auto byte : value) {
-            lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(byte))));
-        }
+    bool reservedName(std::string_view value) {
+        auto lower = utils::string::toLower(std::string(value));
 
-        if (
-            lower == "con" ||
-            lower == "prn" ||
-            lower == "aux" ||
-            lower == "nul" ||
-            lower == "clock$"
-        ) {
+        if (lower == "con" || lower == "prn" || lower == "aux" || lower == "nul" ||
+            lower == "clock$") {
             return true;
         }
-        if (lower.size() != 4) return false;
-        if (lower[3] < '1' || lower[3] > '9') return false;
+        if (lower.size() != 4)
+            return false;
+        if (lower[3] < '1' || lower[3] > '9')
+            return false;
         return lower.starts_with("com") || lower.starts_with("lpt");
     }
 
     std::string replayBaseName(std::string_view input) {
-        if (endsWithTtrl(input)) input.remove_suffix(5);
+        if (endsWithTtrl(input))
+            input.remove_suffix(5);
 
-        std::string result;
-        result.reserve(std::min(input.size(), MaximumReplayName));
+        StringBuffer<MaximumReplayName> buffer;
         bool previousSpace = false;
 
         for (auto byte : input) {
-            if (result.size() == MaximumReplayName) break;
+            if (buffer.size() == MaximumReplayName)
+                break;
 
             auto value = static_cast<unsigned char>(byte);
             if (value == ' ' || value == '\t') {
-                if (!result.empty() && !previousSpace) result.push_back(' ');
+                if (buffer.size() > 0 && !previousSpace)
+                    buffer.append(' ');
                 previousSpace = true;
                 continue;
             }
 
             previousSpace = false;
-            if (
-                std::isalnum(value) ||
-                value == '-' ||
-                value == '_' ||
-                value == '.' ||
-                value == '(' ||
-                value == ')' ||
-                value == '[' ||
-                value == ']'
-            ) {
-                result.push_back(static_cast<char>(value));
+            if (std::isalnum(value) || value == '-' || value == '_' || value == '.' ||
+                value == '(' || value == ')' || value == '[' || value == ']') {
+                buffer.append(static_cast<char>(value));
             } else {
-                result.push_back('_');
+                buffer.append('_');
             }
         }
 
-        while (!result.empty() && (result.front() == ' ' || result.front() == '.')) {
-            result.erase(result.begin());
-        }
-        while (!result.empty() && (result.back() == ' ' || result.back() == '.')) {
-            result.pop_back();
-        }
-        if (result.empty()) result = "Replay";
-        if (reservedName(result)) result.push_back('_');
-        return result;
+        auto str = buffer.str();
+        utils::string::trimIP(str, " .");
+        if (str.empty())
+            str = "Replay";
+        if (reservedName(str))
+            str.push_back('_');
+        return str;
     }
 
     std::string replayFileName(std::string_view name, size_t index) {
+        StringBuffer<256> buf;
         auto base = replayBaseName(name);
         if (index != 0) {
-            base += " (";
-            base += std::to_string(index + 1);
-            base += ')';
+            buf.append("{} ({})", base, index + 1);
+        } else {
+            buf.append("{}", base);
         }
-        base += ".ttrl";
-        return base;
+        buf.append(".ttrl");
+        return buf.str();
     }
 
-    std::expected<void, StorageFailure> ensureDirectory(
-        std::filesystem::path const& directory
-    ) {
-        std::error_code error;
-        auto status = std::filesystem::status(directory, error);
-        if (!error && std::filesystem::exists(status)) {
-            if (std::filesystem::is_directory(status)) return {};
-            return std::unexpected(failure(StorageError::DirectoryUnavailable));
-        }
-        if (error && error != std::errc::no_such_file_or_directory) {
-            return std::unexpected(
-                failure(StorageError::DirectoryUnavailable, error.message())
-            );
+    Result<void, StorageFailure> ensureDirectory(asp::fs::path const& directory) {
+        if (asp::fs::exists(directory)) {
+            auto isDirRes = asp::fs::isDirectory(directory);
+            if (isDirRes.isOk() && isDirRes.unwrap())
+                return Ok();
+            return failure(StorageError::DirectoryUnavailable);
         }
 
-        error.clear();
-        std::filesystem::create_directories(directory, error);
-        if (error) {
-            return std::unexpected(
-                failure(StorageError::DirectoryUnavailable, error.message())
-            );
+        auto createRes = utils::file::createDirectoryAll(directory);
+        if (createRes.isErr()) {
+            return failure(StorageError::DirectoryUnavailable, createRes.unwrapErr());
         }
-        return {};
+        return Ok();
     }
 
-    std::expected<std::filesystem::path, StorageFailure> availablePath(
-        std::filesystem::path const& directory,
-        std::string_view name
-    ) {
+    Result<asp::fs::path, StorageFailure> availablePath(asp::fs::path const& directory,
+                                                        std::string_view name) {
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
             auto path = directory / replayFileName(name, index);
-            std::error_code error;
-            auto exists = std::filesystem::exists(path, error);
-            if (error) {
-                return std::unexpected(failure(StorageError::DirectoryUnavailable, error.message()));
-            }
-            if (!exists) return path;
+            if (!asp::fs::exists(path))
+                return Ok(path);
         }
-        return std::unexpected(failure(StorageError::TooManyFiles));
+        return failure(StorageError::TooManyFiles);
     }
 
-    std::expected<std::filesystem::path, StorageFailure> temporaryPath(
-        std::filesystem::path const& target
-    ) {
+    Result<asp::fs::path, StorageFailure> temporaryPath(asp::fs::path const& target) {
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
             auto path = target;
             path += index == 0 ? ".tmp" : ".tmp" + std::to_string(index + 1);
-            std::error_code error;
-            auto exists = std::filesystem::exists(path, error);
-            if (error) {
-                return std::unexpected(failure(StorageError::DirectoryUnavailable, error.message()));
-            }
-            if (!exists) return path;
+            if (!asp::fs::exists(path))
+                return Ok(path);
         }
-        return std::unexpected(failure(StorageError::TooManyFiles));
+        return failure(StorageError::TooManyFiles);
     }
 
-    void removeTemporary(std::filesystem::path const& path) {
-        std::error_code error;
-        std::filesystem::remove(path, error);
+    asp::fs::Result<void> removeTemporary(asp::fs::path const& path) {
+        auto res = asp::fs::remove(path);
+        if (res.isErr()) {
+            log::warn("Failed to remove temporary replay file at {}: {}",
+                      path,
+                      res.unwrapErr().message());
+        }
+        return res;
     }
 
-    std::string pathFileName(std::filesystem::path const& path) {
-        auto value = path.filename().u8string();
-        return { value.begin(), value.end() };
+    std::string pathFileName(asp::fs::path const& path) {
+        return utils::string::pathToString(path.filename());
     }
-}
+} // namespace
 
 namespace toasty::replay::ttrl {
-    Storage::Storage(std::filesystem::path directory)
-      : m_directory(std::move(directory)) {}
+    Storage::Storage(asp::fs::path directory)
+        : m_directory(std::move(directory)) {}
 
-    std::filesystem::path const& Storage::directory() const {
+    asp::fs::path const& Storage::directory() const {
         return m_directory;
     }
 
-    SaveResult Storage::save(std::string_view name, Replay const& replay) const {
-        auto directoryResult = ensureDirectory(m_directory);
-        if (!directoryResult) return std::unexpected(directoryResult.error());
+    SaveResult Storage::save(ZStringView name, Replay const& replay) const {
+        GEODE_UNWRAP(ensureDirectory(m_directory));
 
         auto encoded = encode(replay);
-        if (!encoded) {
-            return std::unexpected(
-                failure(StorageError::InvalidReplay, {}, encoded.error())
-            );
+        if (encoded.isErr()) {
+            return failure(StorageError::InvalidReplay, {}, encoded.unwrapErr());
         }
 
-        auto target = availablePath(m_directory, name);
-        if (!target) return std::unexpected(target.error());
-        auto temporary = temporaryPath(*target);
-        if (!temporary) return std::unexpected(temporary.error());
+        GEODE_UNWRAP_INTO(auto target, availablePath(m_directory, name));
+        GEODE_UNWRAP_INTO(auto temporary, temporaryPath(target));
 
-        std::ofstream stream(*temporary, std::ios::binary | std::ios::trunc);
-        if (!stream) {
-            removeTemporary(*temporary);
-            return std::unexpected(failure(StorageError::OpenFailed));
+        auto writeRes = utils::file::writeBinary(
+            temporary, ByteSpan(encoded.unwrap().data(), encoded.unwrap().size()));
+        if (writeRes.isErr()) {
+            static_cast<void>(removeTemporary(temporary));
+            return failure(StorageError::WriteFailed, writeRes.unwrapErr());
         }
 
-        stream.write(
-            reinterpret_cast<char const*>(encoded->data()),
-            static_cast<std::streamsize>(encoded->size())
-        );
-        stream.flush();
-        stream.close();
-        if (!stream) {
-            removeTemporary(*temporary);
-            return std::unexpected(failure(StorageError::WriteFailed));
+        auto renameRes = asp::fs::rename(temporary, target);
+        if (renameRes.isErr()) {
+            static_cast<void>(removeTemporary(temporary));
+            return failure(StorageError::RenameFailed);
         }
 
-        std::error_code error;
-        std::filesystem::rename(*temporary, *target, error);
-        if (error) {
-            removeTemporary(*temporary);
-            return std::unexpected(failure(StorageError::RenameFailed, error.message()));
-        }
-
-        return pathFileName(*target);
+        return Ok(pathFileName(target));
     }
 
-    LoadResult Storage::load(std::string_view fileName) const {
-        auto directoryResult = ensureDirectory(m_directory);
-        if (!directoryResult) return std::unexpected(directoryResult.error());
+    LoadResult Storage::load(ZStringView fileName) const {
+        GEODE_UNWRAP(ensureDirectory(m_directory));
 
         auto path = m_directory / replayFileName(fileName, 0);
-        std::error_code error;
-        auto status = std::filesystem::symlink_status(path, error);
-        if (error == std::errc::no_such_file_or_directory) {
-            return std::unexpected(failure(StorageError::FileNotFound));
-        }
-        if (error) {
-            return std::unexpected(failure(StorageError::ReadFailed, error.message()));
-        }
-        if (std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status)) {
-            return std::unexpected(failure(StorageError::InvalidFile));
+        if (!asp::fs::exists(path)) {
+            return failure(StorageError::FileNotFound);
         }
 
-        auto size = std::filesystem::file_size(path, error);
-        if (error) {
-            return std::unexpected(failure(StorageError::ReadFailed, error.message()));
-        }
-        if (size > MaximumFileSize) {
-            return std::unexpected(failure(StorageError::FileTooLarge));
+        auto isFileRes = asp::fs::isFile(path);
+        if (isFileRes.isErr() || !isFileRes.unwrap()) {
+            return failure(StorageError::InvalidFile);
         }
 
-        std::ifstream stream(path, std::ios::binary);
-        if (!stream) return std::unexpected(failure(StorageError::OpenFailed));
-
-        std::vector<uint8_t> bytes(static_cast<size_t>(size));
-        if (!bytes.empty()) {
-            stream.read(
-                reinterpret_cast<char*>(bytes.data()),
-                static_cast<std::streamsize>(bytes.size())
-            );
-            if (stream.gcount() != static_cast<std::streamsize>(bytes.size())) {
-                return std::unexpected(failure(StorageError::ReadFailed));
-            }
+        auto readRes = utils::file::readBinary(path);
+        if (readRes.isErr()) {
+            return failure(StorageError::ReadFailed, readRes.unwrapErr());
         }
-        if (stream.peek() != std::char_traits<char>::eof()) {
-            return std::unexpected(failure(StorageError::ReadFailed));
+
+        auto bytes = std::move(readRes.unwrap());
+        if (bytes.size() > MaximumFileSize) {
+            return failure(StorageError::FileTooLarge);
         }
 
         auto replay = decode(bytes);
-        if (!replay) {
-            return std::unexpected(
-                failure(StorageError::InvalidReplay, {}, replay.error())
-            );
+        if (replay.isErr()) {
+            return failure(StorageError::InvalidReplay, {}, replay.unwrapErr());
         }
-        return std::move(*replay);
+        return Ok(std::move(replay.unwrap()));
     }
 
     ListResult Storage::list() const {
-        auto directoryResult = ensureDirectory(m_directory);
-        if (!directoryResult) return std::unexpected(directoryResult.error());
+        GEODE_UNWRAP(ensureDirectory(m_directory));
 
-        std::vector<std::string> files;
-        std::error_code error;
-        std::filesystem::directory_iterator iterator(
-            m_directory,
-            std::filesystem::directory_options::skip_permission_denied,
-            error
-        );
-        std::filesystem::directory_iterator end;
-        if (error) {
-            return std::unexpected(failure(StorageError::DirectoryUnavailable, error.message()));
+        auto dirRes = utils::file::readDirectory(m_directory);
+        if (dirRes.isErr()) {
+            return failure(StorageError::DirectoryUnavailable, dirRes.unwrapErr());
         }
 
-        while (iterator != end) {
-            auto const& entry = *iterator;
-            auto status = entry.symlink_status(error);
-            if (error) {
-                return std::unexpected(failure(StorageError::DirectoryUnavailable, error.message()));
-            }
-            if (!std::filesystem::is_symlink(status) && std::filesystem::is_regular_file(status)) {
-                auto name = pathFileName(entry.path());
+        std::vector<std::string> files;
+        for (auto const& path : asp::iter::from(dirRes.unwrap())) {
+            auto isFileRes = asp::fs::isFile(path);
+            if (isFileRes.isOk() && isFileRes.unwrap()) {
+                auto name = pathFileName(path);
                 if (endsWithTtrl(name)) {
                     if (files.size() == MaximumReplayFiles) {
-                        return std::unexpected(failure(StorageError::TooManyFiles));
+                        return failure(StorageError::TooManyFiles);
                     }
                     files.push_back(std::move(name));
                 }
             }
-
-            iterator.increment(error);
-            if (error) {
-                return std::unexpected(failure(StorageError::DirectoryUnavailable, error.message()));
-            }
         }
 
         std::sort(files.begin(), files.end());
-        return files;
+        return Ok(files);
     }
 
     std::string_view errorMessage(StorageError error) {
         switch (error) {
-            case StorageError::DirectoryUnavailable:
-                return "The replay directory is unavailable";
-            case StorageError::TooManyFiles: return "There are too many replay files";
-            case StorageError::FileNotFound: return "The replay file was not found";
-            case StorageError::InvalidFile: return "The replay path is not a regular file";
-            case StorageError::FileTooLarge: return "The replay file is too large";
-            case StorageError::OpenFailed: return "The replay file could not be opened";
-            case StorageError::ReadFailed: return "The replay file could not be read";
-            case StorageError::WriteFailed: return "The replay file could not be written";
-            case StorageError::RenameFailed: return "The replay file could not be finalized";
-            case StorageError::InvalidReplay: return "The replay data is invalid";
+        case StorageError::DirectoryUnavailable:
+            return "The replay directory is unavailable";
+        case StorageError::TooManyFiles:
+            return "There are too many replay files";
+        case StorageError::FileNotFound:
+            return "The replay file was not found";
+        case StorageError::InvalidFile:
+            return "The replay path is not a regular file";
+        case StorageError::FileTooLarge:
+            return "The replay file is too large";
+        case StorageError::OpenFailed:
+            return "The replay file could not be opened";
+        case StorageError::ReadFailed:
+            return "The replay file could not be read";
+        case StorageError::WriteFailed:
+            return "The replay file could not be written";
+        case StorageError::RenameFailed:
+            return "The replay file could not be finalized";
+        case StorageError::InvalidReplay:
+            return "The replay data is invalid";
         }
         return "The replay operation failed";
     }
 
     std::string describe(StorageFailure const& failure) {
-        std::string message(errorMessage(failure.error));
+        std::string msg = fmt::format("{}", errorMessage(failure.error));
         if (failure.codec) {
-            message += ": ";
-            message += errorMessage(failure.codec->error);
+            fmt::format_to(std::back_inserter(msg), ": {}", errorMessage(failure.codec->error));
         }
         if (!failure.detail.empty()) {
-            message += ": ";
-            message += failure.detail;
+            fmt::format_to(std::back_inserter(msg), ": {}", failure.detail);
         }
-        return message;
+        return msg;
     }
-}
+} // namespace toasty::replay::ttrl

@@ -11,24 +11,18 @@ namespace toasty::replay {
         uint64_t denominator = 1;
 
         std::optional<TpsRate> normalized() const {
-            if (numerator == 0 || denominator == 0) return std::nullopt;
+            if (numerator == 0 || denominator == 0)
+                return std::nullopt;
             auto divisor = std::gcd(numerator, denominator);
-            return TpsRate { numerator / divisor, denominator / divisor };
+            return TpsRate{numerator / divisor, denominator / divisor};
         }
 
         bool operator==(TpsRate const&) const = default;
     };
 
-    enum class InputButton : uint8_t {
-        Jump = 1,
-        Left = 2,
-        Right = 3
-    };
+    enum class InputButton : uint8_t { Jump = 1, Left = 2, Right = 3 };
 
-    enum class InputPlayer : uint8_t {
-        Player1 = 1,
-        Player2 = 2
-    };
+    enum class InputPlayer : uint8_t { Player1 = 1, Player2 = 2 };
 
     struct InputEvent {
         uint64_t beforeTick = 0;
@@ -61,4 +55,4 @@ namespace toasty::replay {
 
         bool operator==(Replay const&) const = default;
     };
-}
+} // namespace toasty::replay

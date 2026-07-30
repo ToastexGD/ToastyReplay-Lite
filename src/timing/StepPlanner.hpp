@@ -12,20 +12,18 @@ namespace toasty::timing {
     };
 
     class StepPlanner {
-    public:
+      public:
         StepPlan advance(double delta, double timestep) {
-            if (!std::isfinite(delta) || !std::isfinite(timestep) || delta < 0.0 || timestep <= 0.0) {
+            if (!std::isfinite(delta) || !std::isfinite(timestep) || delta < 0.0 ||
+                timestep <= 0.0) {
                 reset();
                 return {};
             }
 
             m_remainder += delta;
             auto rounded = std::round(m_remainder / timestep);
-            auto bounded = std::clamp(
-                rounded,
-                0.0,
-                static_cast<double>(std::numeric_limits<uint32_t>::max())
-            );
+            auto bounded =
+                std::clamp(rounded, 0.0, static_cast<double>(std::numeric_limits<uint32_t>::max()));
             auto steps = static_cast<uint32_t>(bounded);
             auto planned = static_cast<double>(steps) * timestep;
             m_remainder -= planned;
@@ -34,7 +32,7 @@ namespace toasty::timing {
                 m_remainder = 0.0;
             }
 
-            return { steps, planned };
+            return {steps, planned};
         }
 
         void reset() {
@@ -45,7 +43,7 @@ namespace toasty::timing {
             return m_remainder;
         }
 
-    private:
+      private:
         double m_remainder = 0.0;
     };
-}
+} // namespace toasty::timing

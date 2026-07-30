@@ -22,7 +22,7 @@ namespace {
     bool customTimingActive() {
         return toasty::tps::patch::interceptsTicks();
     }
-}
+} // namespace
 
 namespace toasty::tps {
     bool available() {
@@ -34,8 +34,10 @@ namespace toasty::tps {
     }
 
     bool setEnabled(bool value) {
-        if (value && !patch::available()) return false;
-        if (!patch::setEnabled(value)) return false;
+        if (value && !patch::available())
+            return false;
+        if (!patch::setEnabled(value))
+            return false;
         s_enabled = value;
         if (Mod::get()->getSavedValue<bool>("tps-bypass", false) != value) {
             Mod::get()->setSavedValue<bool>("tps-bypass", value);
@@ -59,7 +61,7 @@ namespace toasty::tps {
     std::string const& unavailableReason() {
         return patch::error();
     }
-}
+} // namespace toasty::tps
 
 class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
     struct Fields {
@@ -69,7 +71,8 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
     };
 
     double getModifiedDelta(float dt) {
-        if (m_fields->customDelta) return m_fields->delta;
+        if (m_fields->customDelta)
+            return m_fields->delta;
         return GJBaseGameLayer::getModifiedDelta(dt);
     }
 
@@ -78,10 +81,12 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
         auto target = s_enabled ? s_rate : toasty::tps::Minimum;
         auto timeWarp = std::min(static_cast<double>(m_gameState.m_timeWarp), 1.0);
 
-        if (!active || !std::isfinite(dt) || dt < 0.f || !std::isfinite(timeWarp) || timeWarp <= 0.0) {
+        if (!active || !std::isfinite(dt) || dt < 0.f || !std::isfinite(timeWarp) ||
+            timeWarp <= 0.0) {
             m_fields->planner.reset();
             m_fields->customDelta = false;
-            if (toasty::tps::patch::interceptsTicks()) toasty::tps::patch::setExpected(1);
+            if (toasty::tps::patch::interceptsTicks())
+                toasty::tps::patch::setExpected(1);
             GJBaseGameLayer::update(dt);
             return;
         }
@@ -118,29 +123,30 @@ class $modify(ToastyTpsPlayLayer, PlayLayer) {
 
     unsigned int correctedProgress() const {
         auto ticks = std::round(std::max(0.0, m_gameState.m_levelTime) * 480.0);
-        return static_cast<unsigned int>(std::min(
-            ticks,
-            static_cast<double>(std::numeric_limits<unsigned int>::max())
-        ));
+        return static_cast<unsigned int>(
+            std::min(ticks, static_cast<double>(std::numeric_limits<unsigned int>::max())));
     }
 
     void updateProgressbar() {
         auto original = m_gameState.m_currentProgress;
-        if (needsProgressFix()) m_gameState.m_currentProgress = correctedProgress();
+        if (needsProgressFix())
+            m_gameState.m_currentProgress = correctedProgress();
         PlayLayer::updateProgressbar();
         m_gameState.m_currentProgress = original;
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) override {
         auto original = m_gameState.m_currentProgress;
-        if (needsProgressFix()) m_gameState.m_currentProgress = correctedProgress();
+        if (needsProgressFix())
+            m_gameState.m_currentProgress = correctedProgress();
         PlayLayer::destroyPlayer(player, object);
         m_gameState.m_currentProgress = original;
     }
 
     void levelComplete() {
         auto original = m_gameState.m_commandIndex;
-        if (needsProgressFix()) m_gameState.m_commandIndex = correctedProgress();
+        if (needsProgressFix())
+            m_gameState.m_commandIndex = correctedProgress();
         PlayLayer::levelComplete();
         m_gameState.m_commandIndex = original;
     }

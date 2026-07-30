@@ -2,10 +2,11 @@
 
 #include "TtrlReplay.hpp"
 
+#include <Geode/Result.hpp>
+#include <Geode/DefaultInclude.hpp>
+
 #include <cstddef>
 #include <cstdint>
-#include <expected>
-#include <span>
 #include <string_view>
 #include <vector>
 
@@ -44,10 +45,10 @@ namespace toasty::replay::ttrl {
         bool operator==(CodecFailure const&) const = default;
     };
 
-    using EncodeResult = std::expected<std::vector<uint8_t>, CodecFailure>;
-    using DecodeResult = std::expected<Replay, CodecFailure>;
+    using EncodeResult = geode::Result<geode::ByteVector, CodecFailure>;
+    using DecodeResult = geode::Result<Replay, CodecFailure>;
 
     EncodeResult encode(Replay const& replay);
-    DecodeResult decode(std::span<uint8_t const> bytes);
+    DecodeResult decode(geode::ByteSpan bytes);
     std::string_view errorMessage(CodecError error);
-}
+} // namespace toasty::replay::ttrl

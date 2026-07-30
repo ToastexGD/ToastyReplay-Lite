@@ -2,8 +2,11 @@
 
 #include "TtrlCodec.hpp"
 
-#include <expected>
-#include <filesystem>
+#include <asp/fs.hpp>
+#include <Geode/utils/file.hpp>
+#include <Geode/utils/ZStringView.hpp>
+#include <Geode/Result.hpp>
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,24 +32,24 @@ namespace toasty::replay::ttrl {
         std::optional<CodecFailure> codec;
     };
 
-    using SaveResult = std::expected<std::string, StorageFailure>;
-    using LoadResult = std::expected<Replay, StorageFailure>;
-    using ListResult = std::expected<std::vector<std::string>, StorageFailure>;
+    using SaveResult = geode::Result<std::string, StorageFailure>;
+    using LoadResult = geode::Result<Replay, StorageFailure>;
+    using ListResult = geode::Result<std::vector<std::string>, StorageFailure>;
 
     class Storage {
-    public:
-        explicit Storage(std::filesystem::path directory);
+      public:
+        explicit Storage(asp::fs::path directory);
 
-        std::filesystem::path const& directory() const;
-        SaveResult save(std::string_view name, Replay const& replay) const;
-        LoadResult load(std::string_view fileName) const;
+        asp::fs::path const& directory() const;
+        SaveResult save(geode::ZStringView name, Replay const& replay) const;
+        LoadResult load(geode::ZStringView fileName) const;
         ListResult list() const;
 
-    private:
-        std::filesystem::path m_directory;
+      private:
+        asp::fs::path m_directory;
     };
 
-    std::filesystem::path defaultReplayDirectory();
+    asp::fs::path defaultReplayDirectory();
     std::string_view errorMessage(StorageError error);
     std::string describe(StorageFailure const& failure);
-}
+} // namespace toasty::replay::ttrl

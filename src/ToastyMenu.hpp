@@ -11,7 +11,7 @@
 using namespace geode::prelude;
 
 class ToastyMenu : public geode::Popup {
-protected:
+  protected:
     enum Tab { TabMain, TabMacros, TabSettings, TabKeybinds, TabAbout, TabCount };
     struct Group {
         CCNode* node = nullptr;
@@ -37,16 +37,16 @@ protected:
     void addHeader();
     void addSidebar();
     Group makePage(int tab);
-    void addPageTitle(CCNode* page, const char* title, const char* hint);
+    void addPageTitle(CCNode* page, ZStringView title, ZStringView hint = {});
     NineSlice* addPanel(CCNode* page, CCPoint center, CCSize size);
     ScrollLayer* addScroll(CCNode* page, int tab, CCPoint pos, CCSize size);
 
-    Group makeRow(const char* title, float height, float titleWidth);
-    CCNode* makeToggleRow(const char* id, const char* title, bool on);
+    Group makeRow(ZStringView title, float height, float titleWidth);
+    CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on);
     CCNode* makeTpsRow();
-    CCNode* makeSectionRow(const char* title);
-    CCNode* makeMacroRow(const char* name);
-    CCNode* makeKeybindRow(const char* title, const char* saveId, enumKeyCodes def);
+    CCNode* makeSectionRow(ZStringView title);
+    CCNode* makeMacroRow(ZStringView name);
+    CCNode* makeKeybindRow(ZStringView title, ZStringView saveId, enumKeyCodes def);
     void updateModes();
     void updateTabs();
     void updatePages();
@@ -73,20 +73,20 @@ protected:
     void ccTouchMoved(CCTouch* touch, CCEvent* event) override;
     void ccTouchEnded(CCTouch* touch, CCEvent* event) override;
 
-public:
+  public:
     static ToastyMenu* create();
     static bool handleKey(enumKeyCodes key);
     void show() override;
 };
 
 class RenamePopup : public geode::Popup {
-protected:
+  protected:
     CCLabelBMFont* m_target;
     TextInput* m_input;
 
     bool init(CCLabelBMFont* target);
     void onSave(CCObject* sender);
 
-public:
+  public:
     static RenamePopup* create(CCLabelBMFont* target);
 };

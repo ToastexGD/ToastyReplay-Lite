@@ -2,8 +2,10 @@
 
 #include <Geode/loader/Mod.hpp>
 
+using namespace geode::prelude;
+
 namespace toasty::replay::ttrl {
-    std::filesystem::path defaultReplayDirectory() {
-        return geode::Mod::get()->getSaveDir() / "replays";
+    asp::fs::path defaultReplayDirectory() {
+        return Mod::get()->getSaveDir() / "replays";
     }
-}
+} // namespace toasty::replay::ttrl
