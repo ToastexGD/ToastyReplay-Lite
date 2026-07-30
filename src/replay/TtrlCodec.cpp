@@ -3,9 +3,10 @@
 #include <asp/iter.hpp>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
-#include <cstring>
 #include <limits>
+#include <utility>
 
 using namespace geode::prelude;
 
@@ -56,9 +57,25 @@ namespace toasty::replay::ttrl::codec {
         } while (value != 0);
     }
 
-    template <typename T> void appendValue(ByteVector& bytes, T value) {
-        auto const* ptr = reinterpret_cast<uint8_t const*>(&value);
-        bytes.insert(bytes.end(), ptr, ptr + sizeof(T));
+    void append32(ByteVector& bytes, uint32_t value) {
+        bytes.push_back(static_cast<uint8_t>(value));
+        bytes.push_back(static_cast<uint8_t>(value >> 8));
+        bytes.push_back(static_cast<uint8_t>(value >> 16));
+        bytes.push_back(static_cast<uint8_t>(value >> 24));
+    }
+
+    void append64(ByteVector& bytes, uint64_t value) {
+        for (uint32_t shift = 0; shift < 64; shift += 8) {
+            bytes.push_back(static_cast<uint8_t>(value >> shift));
+        }
+    }
+
+    void appendFloat(ByteVector& bytes, float value) {
+        append32(bytes, std::bit_cast<uint32_t>(value));
+    }
+
+    void appendDouble(ByteVector& bytes, double value) {
+        append64(bytes, std::bit_cast<uint64_t>(value));
     }
 
     uint32_t checksum(ByteSpan bytes) {
@@ -108,24 +125,31 @@ namespace toasty::replay::ttrl::codec {
             return failure(CodecError::InvalidVarint, start);
         }
 
-        template <typename T> Result<T, CodecFailure> readValue() {
-            GEODE_UNWRAP_INTO(auto span, readSpan(sizeof(T)));
-            T value;
-            std::memcpy(&value, span.data(), sizeof(T));
+        Result<uint32_t, CodecFailure> read32() {
+            GEODE_UNWRAP_INTO(auto bytes, readSpan(4));
+            return Ok(static_cast<uint32_t>(bytes[0]) |
+                      (static_cast<uint32_t>(bytes[1]) << 8) |
+                      (static_cast<uint32_t>(bytes[2]) << 16) |
+                      (static_cast<uint32_t>(bytes[3]) << 24));
+        }
+
+        Result<uint64_t, CodecFailure> read64() {
+            GEODE_UNWRAP_INTO(auto bytes, readSpan(8));
+            uint64_t value = 0;
+            for (uint32_t shift = 0; shift < 64; shift += 8) {
+                value |= static_cast<uint64_t>(bytes[shift / 8]) << shift;
+            }
             return Ok(value);
         }
 
-        Result<uint32_t, CodecFailure> read32() {
-            return readValue<uint32_t>();
-        }
-        Result<uint64_t, CodecFailure> read64() {
-            return readValue<uint64_t>();
-        }
         Result<float, CodecFailure> readFloat() {
-            return readValue<float>();
+            GEODE_UNWRAP_INTO(auto value, read32());
+            return Ok(std::bit_cast<float>(value));
         }
+
         Result<double, CodecFailure> readDouble() {
-            return readValue<double>();
+            GEODE_UNWRAP_INTO(auto value, read64());
+            return Ok(std::bit_cast<double>(value));
         }
 
         Result<ByteSpan, CodecFailure> readSpan(size_t size) {
@@ -277,10 +301,10 @@ namespace toasty::replay::ttrl::codec {
                     return failure(CodecError::FileTooLarge, frameFixBytes.size());
                 }
                 appendVarint(frameFixBytes, fix.afterTick - previousTick);
-                appendValue(frameFixBytes, fix.x);
-                appendValue(frameFixBytes, fix.y);
-                appendValue(frameFixBytes, fix.rotation);
-                appendValue(frameFixBytes, fix.verticalVelocity);
+                appendFloat(frameFixBytes, fix.x);
+                appendFloat(frameFixBytes, fix.y);
+                appendFloat(frameFixBytes, fix.rotation);
+                appendDouble(frameFixBytes, fix.verticalVelocity);
                 previousTick = fix.afterTick;
             }
         }
@@ -299,7 +323,7 @@ namespace toasty::replay::ttrl::codec {
         appendVarint(bytes, replay.gameVersion);
         appendVarint(bytes, replay.levelId);
         appendVarint(bytes, replay.levelRevision);
-        appendValue(bytes, replay.levelFingerprint);
+        append64(bytes, replay.levelFingerprint);
         appendVarint(bytes, replay.tickCount);
         appendVarint(bytes, inputBytes.size());
         bytes.insert(bytes.end(), inputBytes.begin(), inputBytes.end());
@@ -314,8 +338,8 @@ namespace toasty::replay::ttrl::codec {
             return failure(CodecError::FileTooLarge, bytes.size());
         }
 
-        appendValue(bytes, checksum(bytes));
-        return Ok(bytes);
+        append32(bytes, checksum(bytes));
+        return Ok(std::move(bytes));
     }
 
     DecodeResult decode(ByteSpan bytes) {
@@ -327,8 +351,11 @@ namespace toasty::replay::ttrl::codec {
         }
 
         auto payloadSize = bytes.size() - 4;
-        uint32_t storedChecksum = 0;
-        std::memcpy(&storedChecksum, bytes.data() + payloadSize, sizeof(storedChecksum));
+        auto checksumBytes = bytes.subspan(payloadSize);
+        auto storedChecksum = static_cast<uint32_t>(checksumBytes[0]) |
+                              (static_cast<uint32_t>(checksumBytes[1]) << 8) |
+                              (static_cast<uint32_t>(checksumBytes[2]) << 16) |
+                              (static_cast<uint32_t>(checksumBytes[3]) << 24);
 
         if (checksum(bytes.first(payloadSize)) != storedChecksum) {
             return failure(CodecError::ChecksumMismatch, payloadSize);
