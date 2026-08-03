@@ -11,30 +11,27 @@
 
 using namespace geode::prelude;
 
-namespace {
-    using toasty::replay::ttrl::CodecFailure;
-    using toasty::replay::ttrl::StorageError;
-    using toasty::replay::ttrl::StorageFailure;
-
+namespace toasty::replay::ttrl {
     constexpr size_t MaximumReplayFiles = 4096;
     constexpr size_t MaximumReplayName = 80;
     constexpr size_t MaximumNameAttempts = 10000;
 
-    auto failure(StorageError error,
-                 std::string detail = {},
-                 std::optional<CodecFailure> codec = std::nullopt) {
+    static auto failure(StorageError error,
+                        std::string detail = {},
+                        std::optional<codec::CodecFailure> codec = std::nullopt) {
         return Err(StorageFailure{error, std::move(detail), codec});
     }
 
-    bool endsWithTtrl(std::string_view value) {
-        if (value.size() < 5)
+    static bool endsWithTtrl(ZStringView value) {
+        auto view = value.view();
+        if (view.size() < 5)
             return false;
-        return utils::string::equalsIgnoreCase(value.substr(value.size() - 5), ".ttrl");
+        return utils::string::equalsIgnoreCase(view.substr(view.size() - 5), ".ttrl");
     }
 
-    bool reservedName(std::string_view value) {
-        auto lower = utils::string::toLower(std::string(value));
-        auto device = std::string_view(lower).substr(0, lower.find('.'));
+    static bool reservedName(ZStringView value) {
+        auto lower = utils::string::toLower(std::string(value.view()));
+        auto device = ZStringView(lower).view().substr(0, lower.find('.'));
 
         if (device == "con" || device == "prn" || device == "aux" || device == "nul" ||
             device == "clock$") {
@@ -47,14 +44,15 @@ namespace {
         return device.starts_with("com") || device.starts_with("lpt");
     }
 
-    std::string replayBaseName(std::string_view input) {
+    static std::string replayBaseName(ZStringView input) {
+        auto view = input.view();
         if (endsWithTtrl(input))
-            input.remove_suffix(5);
+            view.remove_suffix(5);
 
         StringBuffer<MaximumReplayName> buffer;
         bool previousSpace = false;
 
-        for (auto byte : input) {
+        for (auto byte : asp::iter::from(view)) {
             if (buffer.size() == MaximumReplayName)
                 break;
 
@@ -84,7 +82,7 @@ namespace {
         return str;
     }
 
-    std::string replayFileName(std::string_view name, size_t index) {
+    static std::string replayFileName(ZStringView name, size_t index) {
         StringBuffer<256> buf;
         auto base = replayBaseName(name);
         if (index != 0) {
@@ -96,14 +94,15 @@ namespace {
         return buf.str();
     }
 
-    std::string replayLoadFileName(std::string_view name) {
-        auto extension = std::string_view(".ttrl");
-        if (endsWithTtrl(name))
-            extension = name.substr(name.size() - 5);
-        return replayBaseName(name) + std::string(extension);
+    static std::string replayLoadFileName(ZStringView name) {
+        auto view = name.view();
+        auto extension = endsWithTtrl(name) ? view.substr(view.size() - 5) : std::string_view(".ttrl");
+        StringBuffer<256> buf;
+        buf.append("{}{}", replayBaseName(name), extension);
+        return buf.str();
     }
 
-    Result<void, StorageFailure> ensureDirectory(asp::fs::path const& directory) {
+    static Result<void, StorageFailure> ensureDirectory(asp::fs::path const& directory) {
         auto statusRes = asp::fs::status(directory);
         if (statusRes.isOk()) {
             if (statusRes.unwrap().isDirectory())
@@ -123,8 +122,8 @@ namespace {
         return Ok();
     }
 
-    Result<asp::fs::path, StorageFailure> availablePath(asp::fs::path const& directory,
-                                                        std::string_view name) {
+    static Result<asp::fs::path, StorageFailure> availablePath(asp::fs::path const& directory,
+                                                               ZStringView name) {
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
             auto path = directory / replayFileName(name, index);
             auto statusRes = asp::fs::status(path);
@@ -138,10 +137,16 @@ namespace {
         return failure(StorageError::TooManyFiles);
     }
 
-    Result<asp::fs::path, StorageFailure> temporaryPath(asp::fs::path const& target) {
+    static Result<asp::fs::path, StorageFailure> temporaryPath(asp::fs::path const& target) {
+        auto targetStr = utils::string::pathToString(target);
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
-            auto path = target;
-            path += index == 0 ? ".tmp" : ".tmp" + std::to_string(index + 1);
+            StringBuffer<256> buf;
+            if (index == 0) {
+                buf.append("{}.tmp", targetStr);
+            } else {
+                buf.append("{}.tmp{}", targetStr, index + 1);
+            }
+            asp::fs::path path(buf.str());
             auto statusRes = asp::fs::status(path);
             if (statusRes.isErr()) {
                 if (statusRes.unwrapErr().getCode() == std::errc::no_such_file_or_directory) {
@@ -153,22 +158,19 @@ namespace {
         return failure(StorageError::TooManyFiles);
     }
 
-    asp::fs::Result<void> removeTemporary(asp::fs::path const& path) {
+    static asp::fs::Result<void> removeTemporary(asp::fs::path const& path) {
         auto res = asp::fs::remove(path);
         if (res.isErr()) {
-            log::warn("Failed to remove temporary replay file at {}: {}",
-                      path,
+            log::warn("Failed to remove temporary replay file at {}: {}", path,
                       res.unwrapErr().message());
         }
         return res;
     }
 
-    std::string pathFileName(asp::fs::path const& path) {
+    static std::string pathFileName(asp::fs::path const& path) {
         return utils::string::pathToString(path.filename());
     }
-} // namespace
 
-namespace toasty::replay::ttrl {
     Storage::Storage(asp::fs::path directory)
         : m_directory(std::move(directory)) {}
 
@@ -179,7 +181,7 @@ namespace toasty::replay::ttrl {
     SaveResult Storage::save(ZStringView name, Replay const& replay) const {
         GEODE_UNWRAP(ensureDirectory(m_directory));
 
-        auto encoded = encode(replay);
+        auto encoded = codec::encode(replay);
         if (encoded.isErr()) {
             return failure(StorageError::InvalidReplay, {}, encoded.unwrapErr());
         }
@@ -201,7 +203,7 @@ namespace toasty::replay::ttrl {
 
         return Ok(pathFileName(target));
     }
-    
+
     LoadResult Storage::load(ZStringView fileName) const {
         GEODE_UNWRAP(ensureDirectory(m_directory));
 
@@ -226,11 +228,11 @@ namespace toasty::replay::ttrl {
         }
 
         auto bytes = std::move(readRes.unwrap());
-        if (bytes.size() > MaximumFileSize) {
+        if (bytes.size() > codec::MaximumFileSize) {
             return failure(StorageError::FileTooLarge);
         }
 
-        auto replay = decode(bytes);
+        auto replay = codec::decode(bytes);
         if (replay.isErr()) {
             return failure(StorageError::InvalidReplay, {}, replay.unwrapErr());
         }
@@ -264,7 +266,7 @@ namespace toasty::replay::ttrl {
         return Ok(std::move(files));
     }
 
-    std::string_view errorMessage(StorageError error) {
+    ZStringView errorMessage(StorageError error) {
         switch (error) {
         case StorageError::DirectoryUnavailable:
             return "The replay directory is unavailable";
@@ -291,13 +293,14 @@ namespace toasty::replay::ttrl {
     }
 
     std::string describe(StorageFailure const& failure) {
-        std::string msg = fmt::format("{}", errorMessage(failure.error));
+        StringBuffer<256> msg;
+        msg.append("{}", errorMessage(failure.error));
         if (failure.codec) {
-            fmt::format_to(std::back_inserter(msg), ": {}", errorMessage(failure.codec->error));
+            msg.append(": {}", codec::errorMessage(failure.codec->error));
         }
         if (!failure.detail.empty()) {
-            fmt::format_to(std::back_inserter(msg), ": {}", failure.detail);
+            msg.append(": {}", failure.detail);
         }
-        return msg;
+        return msg.str();
     }
 } // namespace toasty::replay::ttrl

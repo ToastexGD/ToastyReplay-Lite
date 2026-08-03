@@ -1,12 +1,10 @@
 #include "TtrlFingerprint.hpp"
 #include <asp/iter.hpp>
 
-namespace {
+namespace toasty::replay::ttrl {
     constexpr uint64_t Offset = 14695981039346656037ull;
     constexpr uint64_t Prime = 1099511628211ull;
-} // namespace
 
-namespace toasty::replay::ttrl {
     uint64_t fingerprintLevelData(std::string_view levelData) {
         if (levelData.empty())
             return 0;

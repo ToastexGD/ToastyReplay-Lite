@@ -6,11 +6,9 @@
 #include <Geode/DefaultInclude.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <string_view>
-#include <vector>
 
-namespace toasty::replay::ttrl {
+namespace toasty::replay::ttrl::codec {
     constexpr size_t MaximumFileSize = 64 * 1024 * 1024;
     constexpr size_t MaximumInputSize = 8 * 1024 * 1024;
     constexpr size_t MaximumInputEvents = 1024 * 1024;
@@ -51,4 +49,4 @@ namespace toasty::replay::ttrl {
     EncodeResult encode(Replay const& replay);
     DecodeResult decode(geode::ByteSpan bytes);
     std::string_view errorMessage(CodecError error);
-} // namespace toasty::replay::ttrl
+} // namespace toasty::replay::ttrl::codec

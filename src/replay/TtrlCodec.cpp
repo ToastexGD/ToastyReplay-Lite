@@ -9,19 +9,13 @@
 
 using namespace geode::prelude;
 
-namespace {
+namespace toasty::replay::ttrl::codec {
     using toasty::replay::FrameFix;
     using toasty::replay::InputButton;
     using toasty::replay::InputEvent;
     using toasty::replay::InputPlayer;
     using toasty::replay::Replay;
     using toasty::replay::TpsRate;
-    using toasty::replay::ttrl::CodecError;
-    using toasty::replay::ttrl::CodecFailure;
-    using toasty::replay::ttrl::MaximumFileSize;
-    using toasty::replay::ttrl::MaximumFrameFixes;
-    using toasty::replay::ttrl::MaximumInputEvents;
-    using toasty::replay::ttrl::MaximumInputSize;
 
     constexpr std::array<uint8_t, 4> Magic = {'T', 'T', 'R', 'L'};
     constexpr uint8_t Version = 1;
@@ -33,7 +27,7 @@ namespace {
     constexpr size_t MaximumFrameFixSize = MaximumFileSize - MaximumInputSize;
     constexpr size_t MinimumFrameFixRecordSize = 21;
 
-    impl::ErrContainer<CodecFailure> failure(CodecError error, size_t offset) {
+    static impl::ErrContainer<CodecFailure> failure(CodecError error, size_t offset) {
         return Err(CodecFailure{error, offset});
     }
 
@@ -249,9 +243,7 @@ namespace {
 
         return Ok(*tps);
     }
-} // namespace
 
-namespace toasty::replay::ttrl {
     EncodeResult encode(Replay const& replay) {
         auto inputChannels = usesInputChannels(replay);
         GEODE_UNWRAP_INTO(auto tps, validate(replay, inputChannels));
@@ -521,4 +513,4 @@ namespace toasty::replay::ttrl {
         }
         return "The replay is invalid";
     }
-} // namespace toasty::replay::ttrl
+} // namespace toasty::replay::ttrl::codec

@@ -29,7 +29,7 @@ namespace toasty::replay::ttrl {
     struct StorageFailure {
         StorageError error;
         std::string detail;
-        std::optional<CodecFailure> codec;
+        std::optional<codec::CodecFailure> codec;
     };
 
     using SaveResult = geode::Result<std::string, StorageFailure>;
@@ -50,6 +50,6 @@ namespace toasty::replay::ttrl {
     };
 
     asp::fs::path defaultReplayDirectory();
-    std::string_view errorMessage(StorageError error);
+    geode::ZStringView errorMessage(StorageError error);
     std::string describe(StorageFailure const& failure);
 } // namespace toasty::replay::ttrl
