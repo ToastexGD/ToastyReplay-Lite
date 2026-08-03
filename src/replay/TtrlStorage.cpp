@@ -1,13 +1,12 @@
 #include "TtrlStorage.hpp"
 
 #include <asp/fs.hpp>
-#include <Geode/utils/file.hpp>
+#include <asp/iter.hpp>
 #include <Geode/utils/string.hpp>
 #include <Geode/utils/StringBuffer.hpp>
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <utility>
 
 using namespace geode::prelude;
@@ -117,9 +116,9 @@ namespace {
             return failure(StorageError::DirectoryUnavailable, statusError.message());
         }
 
-        auto createRes = utils::file::createDirectoryAll(directory);
+        auto createRes = asp::fs::createDirAll(directory);
         if (createRes.isErr()) {
-            return failure(StorageError::DirectoryUnavailable, createRes.unwrapErr());
+            return failure(StorageError::DirectoryUnavailable, createRes.unwrapErr().message());
         }
         return Ok();
     }
@@ -128,13 +127,13 @@ namespace {
                                                         std::string_view name) {
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
             auto path = directory / replayFileName(name, index);
-            std::error_code error;
-            auto exists = std::filesystem::exists(path, error);
-            if (error) {
-                return failure(StorageError::DirectoryUnavailable, error.message());
+            auto statusRes = asp::fs::status(path);
+            if (statusRes.isErr()) {
+                if (statusRes.unwrapErr().getCode() == std::errc::no_such_file_or_directory) {
+                    return Ok(path);
+                }
+                return failure(StorageError::DirectoryUnavailable, statusRes.unwrapErr().message());
             }
-            if (!exists)
-                return Ok(path);
         }
         return failure(StorageError::TooManyFiles);
     }
@@ -143,13 +142,13 @@ namespace {
         for (size_t index = 0; index < MaximumNameAttempts; ++index) {
             auto path = target;
             path += index == 0 ? ".tmp" : ".tmp" + std::to_string(index + 1);
-            std::error_code error;
-            auto exists = std::filesystem::exists(path, error);
-            if (error) {
-                return failure(StorageError::DirectoryUnavailable, error.message());
+            auto statusRes = asp::fs::status(path);
+            if (statusRes.isErr()) {
+                if (statusRes.unwrapErr().getCode() == std::errc::no_such_file_or_directory) {
+                    return Ok(path);
+                }
+                return failure(StorageError::DirectoryUnavailable, statusRes.unwrapErr().message());
             }
-            if (!exists)
-                return Ok(path);
         }
         return failure(StorageError::TooManyFiles);
     }
@@ -188,8 +187,7 @@ namespace toasty::replay::ttrl {
         GEODE_UNWRAP_INTO(auto target, availablePath(m_directory, name));
         GEODE_UNWRAP_INTO(auto temporary, temporaryPath(target));
 
-        auto writeRes = utils::file::writeBinary(
-            temporary, ByteSpan(encoded.unwrap().data(), encoded.unwrap().size()));
+        auto writeRes = asp::fs::write(temporary, encoded.unwrap());
         if (writeRes.isErr()) {
             static_cast<void>(removeTemporary(temporary));
             return failure(StorageError::WriteFailed, writeRes.unwrapErr());
@@ -203,33 +201,26 @@ namespace toasty::replay::ttrl {
 
         return Ok(pathFileName(target));
     }
-
+    
     LoadResult Storage::load(ZStringView fileName) const {
         GEODE_UNWRAP(ensureDirectory(m_directory));
 
         auto path = m_directory / replayLoadFileName(fileName);
-        std::error_code error;
-        auto status = std::filesystem::symlink_status(path, error);
-        if (error == std::errc::no_such_file_or_directory ||
-            status.type() == std::filesystem::file_type::not_found) {
-            return failure(StorageError::FileNotFound);
+        auto statusRes = asp::fs::status(path);
+        if (statusRes.isErr()) {
+            auto err = statusRes.unwrapErr();
+            if (err.getCode() == std::errc::no_such_file_or_directory) {
+                return failure(StorageError::FileNotFound);
+            }
+            return failure(StorageError::ReadFailed, err.message());
         }
-        if (error) {
-            return failure(StorageError::ReadFailed, error.message());
-        }
-        if (std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status)) {
+
+        auto status = statusRes.unwrap();
+        if (status.isSymlink() || !status.isFile()) {
             return failure(StorageError::InvalidFile);
         }
 
-        auto size = std::filesystem::file_size(path, error);
-        if (error) {
-            return failure(StorageError::ReadFailed, error.message());
-        }
-        if (size > MaximumFileSize) {
-            return failure(StorageError::FileTooLarge);
-        }
-
-        auto readRes = utils::file::readBinary(path);
+        auto readRes = asp::fs::read(path);
         if (readRes.isErr()) {
             return failure(StorageError::ReadFailed, readRes.unwrapErr());
         }
@@ -255,28 +246,17 @@ namespace toasty::replay::ttrl {
         }
 
         std::vector<std::string> files;
-        auto iterator = dirRes.unwrap();
-        std::filesystem::directory_iterator end;
-        std::error_code error;
-        while (iterator != end) {
-            auto status = iterator->symlink_status(error);
-            if (error) {
-                return failure(StorageError::DirectoryUnavailable, error.message());
-            }
-            if (!std::filesystem::is_symlink(status) &&
-                std::filesystem::is_regular_file(status)) {
-                auto name = pathFileName(iterator->path());
+        for (auto const& entry : asp::iter::from(dirRes.unwrap())) {
+            auto const& path = entry.get().path();
+            auto isFileRes = asp::fs::isFile(path);
+            if (isFileRes.isOk() && isFileRes.unwrap()) {
+                auto name = pathFileName(path);
                 if (endsWithTtrl(name)) {
                     if (files.size() == MaximumReplayFiles) {
                         return failure(StorageError::TooManyFiles);
                     }
                     files.push_back(std::move(name));
                 }
-            }
-
-            iterator.increment(error);
-            if (error) {
-                return failure(StorageError::DirectoryUnavailable, error.message());
             }
         }
 
