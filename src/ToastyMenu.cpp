@@ -1,6 +1,8 @@
 #include "ToastyMenu.hpp"
 #include <asp/iter.hpp>
 #include <fmt/ranges.h>
+#include <Geode/ui/Notification.hpp>
+#include "engine/Engine.hpp"
 #include "timing/TpsBypass.hpp"
 
 #include <charconv>
@@ -722,6 +724,31 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
             ToastyMenu::create()->show();
         return true;
     }
+
+    auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
+    if (static_cast<int>(key) == recordKey) {
+        auto next = toasty::engine::recording() ? toasty::engine::Mode::Off
+                                                : toasty::engine::Mode::Record;
+        toasty::engine::setMode(next);
+        geode::Notification::create(next == toasty::engine::Mode::Record ? "Recording"
+                                                                         : "Record off",
+                                    NotificationIcon::Info)
+            ->show();
+        return true;
+    }
+
+    auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
+    if (static_cast<int>(key) == replayKey) {
+        auto next = toasty::engine::mode() == toasty::engine::Mode::Play ? toasty::engine::Mode::Off
+                                                                         : toasty::engine::Mode::Play;
+        toasty::engine::setMode(next);
+        geode::Notification::create(next == toasty::engine::Mode::Play ? "Replaying"
+                                                                       : "Replay off",
+                                    NotificationIcon::Info)
+            ->show();
+        return true;
+    }
+
     return false;
 }
 
