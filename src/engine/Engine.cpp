@@ -1,6 +1,9 @@
 #include "Engine.hpp"
 
+#include "../replay/TtrlFingerprint.hpp"
+
 #include <algorithm>
+#include <utility>
 
 namespace toasty::engine {
     namespace {
@@ -10,6 +13,8 @@ namespace toasty::engine {
         Replay s_recording;
         bool s_attemptActive = false;
         uint64_t s_maxTick = 0;
+        std::string s_levelName;
+        std::string s_levelData;
     } // namespace
 
     Mode mode() {
@@ -24,10 +29,15 @@ namespace toasty::engine {
         return s_mode == Mode::Record;
     }
 
-    void beginLevelSession(uint64_t levelId, uint64_t levelRevision) {
+    void beginLevelSession(uint64_t levelId,
+                           uint64_t levelRevision,
+                           std::string levelName,
+                           std::string levelData) {
         s_recording = {};
         s_recording.levelId = levelId;
         s_recording.levelRevision = levelRevision;
+        s_levelName = std::move(levelName);
+        s_levelData = std::move(levelData);
         s_attemptActive = false;
         s_maxTick = 0;
     }
@@ -57,9 +67,14 @@ namespace toasty::engine {
             return std::nullopt;
         }
         s_recording.tickCount = s_maxTick + 1;
+        s_recording.levelFingerprint = toasty::replay::ttrl::fingerprintLevelData(s_levelData);
         auto result = std::move(s_recording);
         s_recording = {};
         s_maxTick = 0;
         return result;
+    }
+
+    std::string const& levelName() {
+        return s_levelName;
     }
 } // namespace toasty::engine

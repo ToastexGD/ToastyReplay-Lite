@@ -727,13 +727,12 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
 
     auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
     if (static_cast<int>(key) == recordKey) {
-        auto next = toasty::engine::recording() ? toasty::engine::Mode::Off
-                                                : toasty::engine::Mode::Record;
-        toasty::engine::setMode(next);
-        geode::Notification::create(next == toasty::engine::Mode::Record ? "Recording"
-                                                                         : "Record off",
-                                    NotificationIcon::Info)
-            ->show();
+        if (toasty::engine::recording()) {
+            toasty::engine::saveRecordingIfAny();
+        } else {
+            toasty::engine::setMode(toasty::engine::Mode::Record);
+            geode::Notification::create("Recording", NotificationIcon::Info)->show();
+        }
         return true;
     }
 
