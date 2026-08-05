@@ -3,8 +3,10 @@
 #include <fmt/ranges.h>
 #include <Geode/ui/Notification.hpp>
 #include "engine/Engine.hpp"
+#include "replay/TtrlStorage.hpp"
 #include "timing/TpsBypass.hpp"
 
+#include <algorithm>
 #include <charconv>
 
 static constexpr float POPUP_W = 450.f;
@@ -48,6 +50,52 @@ static ToastyMenu* s_instance = nullptr;
 static ButtonSprite* s_captureBtn = nullptr;
 static std::string s_captureId;
 static std::string s_capturePrev;
+static constexpr auto MACRO_FILE_ID = "toastexgd.toastyreplay-lite/macro-file";
+
+static void resumeIfPaused() {
+    auto scene = CCDirector::sharedDirector()->getRunningScene();
+    if (!scene)
+        return;
+    if (auto pause = scene->getChildByType<PauseLayer>(0)) {
+        pause->onResume(nullptr);
+    }
+}
+
+static void startRecordingFromMenu() {
+    if (toasty::engine::startRecording()) {
+        resumeIfPaused();
+    }
+}
+
+static void startReplayFromMenu(std::string name) {
+    if (toasty::engine::loadReplayAndBegin(std::move(name))) {
+        resumeIfPaused();
+    }
+}
+
+static void setInteraction(CCNode* node, bool enabled) {
+    if (auto menu = typeinfo_cast<CCMenu*>(node)) {
+        menu->setTouchEnabled(enabled);
+    }
+    if (auto scroll = typeinfo_cast<ScrollLayer*>(node)) {
+        scroll->setTouchEnabled(enabled);
+    }
+    if (!node->getChildren())
+        return;
+    for (auto child : CCArrayExt<CCNode*>(node->getChildren())) {
+        setInteraction(child, enabled);
+    }
+}
+
+static std::string macroNameFromSender(CCObject* sender) {
+    auto node = typeinfo_cast<CCNode*>(sender);
+    auto name = node ? typeinfo_cast<CCString*>(node->getUserObject(MACRO_FILE_ID)) : nullptr;
+    return name ? std::string(name->getCString()) : std::string();
+}
+
+static void setMacroName(CCNode* node, std::string const& fileName) {
+    node->setUserObject(MACRO_FILE_ID, CCString::create(fileName));
+}
 
 static std::string keyName(enumKeyCodes key) {
     std::string name = CCKeyboardDispatcher::get()->keyToString(key);
@@ -169,14 +217,6 @@ bool ToastyMenu::init() {
         auto [page, menu] = this->makePage(TabMacros);
         this->addPageTitle(page, "Macro List", nullptr);
 
-        auto plusSpr = ButtonSprite::create("+", "bigFont.fnt", "GJ_button_01.png", .8f);
-        plusSpr->setScale(.4f);
-        auto plusBtn =
-            CCMenuItemSpriteExtra::create(plusSpr, this, menu_selector(ToastyMenu::onAddMacro));
-        plusBtn->setID("add-macro");
-        plusBtn->setPosition({398.f, TITLE_Y});
-        menu->addChild(plusBtn);
-
         if (auto refreshSpr = CCSprite::createWithSpriteFrameName("GJ_updateBtn_001.png")) {
             refreshSpr->setScale(.4f);
             auto refreshBtn = CCMenuItemSpriteExtra::create(
@@ -187,23 +227,9 @@ bool ToastyMenu::init() {
         }
 
         this->addPanel(page, {PANEL_X, 129.f}, {PANEL_W, 214.f});
-        auto scroll = this->addScroll(page, TabMacros, {ROW_X, 26.f}, {ROW_W, 206.f});
+        m_macroScroll = this->addScroll(page, TabMacros, {ROW_X, 26.f}, {ROW_W, 206.f});
 
-        const char* macroNames[] = {
-            "diddy??????????",
-            "wave spam",
-            "SAKUPEN CIRCLES XXXX",
-            "sync test",
-            "sakupen diddy",
-            "old",
-            "full run backup"}; // honestly this is just temperary untill someone sets up the macro
-                                // recording system along with whatever is needed to be implemented
-                                // related to that
-        for (auto name : asp::iter::from(macroNames)) {
-            scroll->m_contentLayer->addChild(this->makeMacroRow(name));
-        }
-        scroll->m_contentLayer->updateLayout();
-        scroll->scrollToTop();
+        this->refreshMacroList();
     }
 
     // settings page
@@ -266,7 +292,9 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(
             this->makeToggleRow("remember-settings", "Remember Settings", true));
         scroll->m_contentLayer->addChild(
-            this->makeToggleRow("auto-save-macros", "Auto Save Macros", true));
+            this->makeToggleRow("auto-save-macros",
+                                "Auto Save Macros",
+                                Mod::get()->getSavedValue<bool>("auto-save-macros", true)));
         scroll->m_contentLayer->addChild(
             this->makeToggleRow("check-for-updates", "Check For Updates", true));
         scroll->m_contentLayer->addChild(
@@ -582,18 +610,20 @@ CCNode* ToastyMenu::makeSectionRow(ZStringView title) {
     return row;
 }
 
-CCNode* ToastyMenu::makeMacroRow(ZStringView name) {
+CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
     auto row = CCNode::create();
     row->setContentSize({ROW_W, 28.f});
 
     auto bg = makeBG(row->getContentSize(), {0, 0, 0}, 45, true);
     bg->setPosition({ROW_W / 2.f, 14.f});
     row->addChild(bg);
+    m_macroRowBgs.push_back(bg);
 
-    auto label = CCLabelBMFont::create(name.c_str(), "chatFont.fnt");
+    auto displayName = toasty::replay::ttrl::displayName(fileName);
+    auto label = CCLabelBMFont::create(displayName.c_str(), "chatFont.fnt");
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({10.f, 14.f});
-    label->limitLabelWidth(175.f, .65f, .1f);
+    label->limitLabelWidth(155.f, .65f, .1f);
     row->addChild(label);
 
     auto menu = CCMenu::create();
@@ -601,22 +631,49 @@ CCNode* ToastyMenu::makeMacroRow(ZStringView name) {
     menu->setContentSize(row->getContentSize());
     row->addChild(menu);
 
-    auto renameSpr = ButtonSprite::create("Edit", "bigFont.fnt", "GJ_button_04.png", .8f);
-    renameSpr->setScale(.4f);
-    auto renameBtn =
-        CCMenuItemSpriteExtra::create(renameSpr, this, menu_selector(ToastyMenu::onRename));
-    renameBtn->setUserObject(label);
-    renameBtn->setID("rename");
-    renameBtn->setPosition({250.f, 14.f});
-    menu->addChild(renameBtn);
+    auto hitSpr = CCSprite::createWithSpriteFrameName("square02b_001.png");
+    hitSpr->setOpacity(0);
+    hitSpr->setContentSize({170.f, 28.f});
+    auto hitBtn =
+        CCMenuItemSpriteExtra::create(hitSpr, this, menu_selector(ToastyMenu::onSelectMacro));
+    hitBtn->setTag(index);
+    hitBtn->setPosition({85.f, 14.f});
+    hitBtn->setID("select");
+    setMacroName(hitBtn, fileName);
+    menu->addChild(hitBtn);
 
-    auto dotsSpr = ButtonSprite::create("...", "bigFont.fnt", "GJ_button_04.png", .8f);
-    dotsSpr->setScale(.4f);
-    auto dotsBtn =
-        CCMenuItemSpriteExtra::create(dotsSpr, this, menu_selector(ToastyMenu::onMacroOptions));
-    dotsBtn->setID("options");
-    dotsBtn->setPosition({285.f, 14.f});
-    menu->addChild(dotsBtn);
+    auto replaySpr = ButtonSprite::create("Replay", "bigFont.fnt", "GJ_button_01.png", .8f);
+    replaySpr->setScale(.4f);
+    auto replayBtn =
+        CCMenuItemSpriteExtra::create(replaySpr, this, menu_selector(ToastyMenu::onReplayMacro));
+    replayBtn->setTag(index);
+    replayBtn->setID("replay");
+    setMacroName(replayBtn, fileName);
+    replayBtn->setPosition({222.f, 14.f});
+    menu->addChild(replayBtn);
+
+    if (auto renameSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
+        renameSpr->setScale(.45f);
+        auto renameBtn = CCMenuItemSpriteExtra::create(
+            renameSpr, this, menu_selector(ToastyMenu::onRenameMacro));
+        renameBtn->setTag(index);
+        renameBtn->setID("rename");
+        setMacroName(renameBtn, fileName);
+        renameBtn->setPosition({268.f, 14.f});
+        menu->addChild(renameBtn);
+    }
+
+    auto deleteSpr = CCSprite::createWithSpriteFrameName("GJ_deleteBtn_001.png");
+    if (deleteSpr) {
+        deleteSpr->setScale(.5f);
+        auto deleteBtn = CCMenuItemSpriteExtra::create(
+            deleteSpr, this, menu_selector(ToastyMenu::onDeleteMacro));
+        deleteBtn->setTag(index);
+        deleteBtn->setID("delete");
+        setMacroName(deleteBtn, fileName);
+        deleteBtn->setPosition({292.f, 14.f});
+        menu->addChild(deleteBtn);
+    }
 
     return row;
 }
@@ -655,6 +712,8 @@ void ToastyMenu::show() {
 
     m_mainLayer->setScale(0.f);
     m_mainLayer->runAction(CCEaseElasticOut::create(CCScaleTo::create(.5f, scale), .6f));
+
+    this->updateModes();
 
     // gd hides the cursor in levels
     PlatformToolbox::showCursor();
@@ -730,7 +789,7 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
         if (toasty::engine::recording()) {
             toasty::engine::stopRecording(true);
         } else {
-            toasty::engine::startRecording();
+            startRecordingFromMenu();
         }
         return true;
     }
@@ -745,8 +804,9 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
 }
 
 void ToastyMenu::updateModes() {
+    auto mode = static_cast<int>(toasty::engine::mode());
     for (int i = 0; i < 3; i++) {
-        bool on = i == m_mode;
+        bool on = i == mode;
         m_modeBgs[i]->setColor(on ? ccColor3B{255, 255, 255} : ccColor3B{95, 95, 95});
         m_modeBgs[i]->setOpacity(on ? 255 : 190);
         m_modeLabels[i]->setColor(on ? ccColor3B{255, 255, 255} : ccColor3B{195, 195, 195});
@@ -769,24 +829,94 @@ void ToastyMenu::updatePages() {
     for (int i = 0; i < TabCount; i++) {
         bool visible = i == m_tab;
         m_pages[i]->setVisible(visible);
-        for (auto node : asp::iter::from(m_pageTouchNodes[i])) {
-            node->setTouchEnabled(visible);
-        }
+        setInteraction(m_pages[i], visible);
+    }
+}
+
+void ToastyMenu::refreshMacroList() {
+    if (!m_macroScroll) {
+        return;
+    }
+    toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
+    auto files = storage.list();
+    if (files.isErr()) {
+        FLAlertLayer::create("Load Failed",
+                             toasty::replay::ttrl::describe(files.unwrapErr()),
+                             "OK")
+            ->show();
+        return;
+    }
+    m_macroNames = std::move(files.unwrap());
+    auto selected = std::find(
+        m_macroNames.begin(), m_macroNames.end(), toasty::engine::selectedReplay());
+    m_selectedMacro = selected == m_macroNames.end()
+                          ? -1
+                          : static_cast<int>(std::distance(m_macroNames.begin(), selected));
+    if (m_selectedMacro < 0) {
+        toasty::engine::setSelectedReplay({});
+    }
+    m_macroRowBgs.clear();
+    auto content = m_macroScroll->m_contentLayer;
+    content->removeAllChildrenWithCleanup(true);
+    for (size_t index = 0; index < m_macroNames.size(); ++index) {
+        content->addChild(this->makeMacroRow(m_macroNames[index], static_cast<int>(index)));
+    }
+    content->updateLayout();
+    m_macroScroll->scrollToTop();
+    for (auto [index, bg] : asp::iter::enumerate(m_macroRowBgs)) {
+        bg->setColor(static_cast<int>(index) == m_selectedMacro ? ACCENT_COLOR
+                                                               : ccColor3B{0, 0, 0});
     }
 }
 
 void ToastyMenu::onMode(CCObject* sender) {
-    m_mode = static_cast<CCNode*>(sender)->getTag();
+    auto mode = static_cast<CCNode*>(sender)->getTag();
+    if (mode == 0) {
+        if (toasty::engine::recording()) {
+            toasty::engine::stopRecording(true);
+        }
+        if (toasty::engine::playing()) {
+            toasty::engine::stopPlayback();
+        }
+    } else if (mode == 1) {
+        this->onClose(nullptr);
+        queueInMainThread(startRecordingFromMenu);
+        return;
+    } else {
+        if (toasty::engine::recording()) {
+            toasty::engine::stopRecording(true);
+        }
+        if (toasty::engine::selectedReplay().empty()) {
+            FLAlertLayer::create("Select Macro", "Pick a replay from the Macro List first", "OK")
+                ->show();
+        } else {
+            auto name = toasty::engine::selectedReplay();
+            this->onClose(nullptr);
+            queueInMainThread([name = std::move(name)] { startReplayFromMenu(name); });
+            return;
+        }
+    }
     this->updateModes();
 }
 
 void ToastyMenu::onTab(CCObject* sender) {
     m_tab = static_cast<CCNode*>(sender)->getTag();
+    if (m_tab == TabMacros) {
+        this->refreshMacroList();
+    }
     this->updateTabs();
     this->updatePages();
 }
 
-void ToastyMenu::onToggleOption(CCObject* sender) {}
+void ToastyMenu::onToggleOption(CCObject* sender) {
+    auto toggle = static_cast<CCMenuItemToggler*>(sender);
+    auto row = static_cast<CCNode*>(toggle->getParent()->getParent());
+    auto id = row->getID();
+    if (!id.empty()) {
+        auto next = !toggle->isToggled();
+        Mod::get()->setSavedValue<bool>(id, next);
+    }
+}
 
 void ToastyMenu::onTpsToggle(CCObject* sender) {
     auto toggle = static_cast<CCMenuItemToggler*>(sender);
@@ -822,11 +952,22 @@ void ToastyMenu::onTpsInfo(CCObject* sender) {
         ->show();
 }
 
-void ToastyMenu::onAddMacro(CCObject* sender) {}
+void ToastyMenu::onRefreshMacros(CCObject* sender) {
+    this->refreshMacroList();
+}
 
-void ToastyMenu::onRefreshMacros(CCObject* sender) {}
-
-void ToastyMenu::onMacroOptions(CCObject* sender) {}
+void ToastyMenu::onSelectMacro(CCObject* sender) {
+    auto index = static_cast<CCNode*>(sender)->getTag();
+    auto name = macroNameFromSender(sender);
+    if (name.empty() || index < 0 || index >= static_cast<int>(m_macroRowBgs.size())) {
+        return;
+    }
+    toasty::engine::setSelectedReplay(std::move(name));
+    m_selectedMacro = index;
+    for (auto [i, bg] : asp::iter::enumerate(m_macroRowBgs)) {
+        bg->setColor(i == index ? ACCENT_COLOR : ccColor3B{0, 0, 0});
+    }
+}
 
 void ToastyMenu::onAccentPrev(CCObject* sender) {}
 
@@ -873,61 +1014,140 @@ void ToastyMenu::onClose(CCObject* sender) {
     Popup::onClose(sender);
 }
 
-void ToastyMenu::onRename(CCObject* sender) {
-    auto label = static_cast<CCLabelBMFont*>(static_cast<CCNode*>(sender)->getUserObject());
-    if (label)
-        RenamePopup::create(label)->show();
+void ToastyMenu::onReplayMacro(CCObject* sender) {
+    auto name = macroNameFromSender(sender);
+    if (name.empty()) {
+        return;
+    }
+    toasty::engine::setSelectedReplay(name);
+    this->onClose(nullptr);
+    queueInMainThread([name = std::move(name)] { startReplayFromMenu(name); });
+}
+
+void ToastyMenu::onRenameMacro(CCObject* sender) {
+    auto name = macroNameFromSender(sender);
+    if (name.empty()) {
+        return;
+    }
+    if (auto popup = RenameMacroPopup::create(this, std::move(name))) {
+        popup->show();
+    }
+}
+
+void ToastyMenu::onDeleteMacro(CCObject* sender) {
+    auto name = macroNameFromSender(sender);
+    if (name.empty()) {
+        return;
+    }
+    WeakRef<ToastyMenu> weak(this);
+    queueInMainThread([weak = std::move(weak), name = std::move(name)] {
+        toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
+        auto result = storage.remove(name);
+        auto menu = weak.lock();
+        if (result.isErr()) {
+            FLAlertLayer::create("Delete Failed",
+                                 toasty::replay::ttrl::describe(result.unwrapErr()),
+                                 "OK")
+                ->show();
+            return;
+        }
+        if (toasty::engine::selectedReplay() == name) {
+            toasty::engine::setSelectedReplay({});
+            if (toasty::engine::playing()) {
+                toasty::engine::stopPlayback();
+            }
+        }
+        if (menu) {
+            menu->refreshMacroList();
+        }
+    });
 }
 
 void ToastyMenu::onSeedInfo(CCObject* sender) {
     FLAlertLayer::create("Set Seed", "placeholder", "OK")->show();
 }
 
-RenamePopup* RenamePopup::create(CCLabelBMFont* target) {
-    auto ret = new RenamePopup();
-    if (ret->init(target)) {
-        ret->autorelease();
-        return ret;
+RenameMacroPopup* RenameMacroPopup::create(ToastyMenu* menu, std::string fileName) {
+    auto popup = new RenameMacroPopup();
+    if (popup->init(menu, std::move(fileName))) {
+        popup->autorelease();
+        return popup;
     }
-    delete ret;
+    delete popup;
     return nullptr;
 }
 
-bool RenamePopup::init(CCLabelBMFont* target) {
-    if (!Popup::init(300.f, 160.f))
+bool RenameMacroPopup::init(ToastyMenu* menu, std::string fileName) {
+    if (!Popup::init(300.f, 160.f)) {
         return false;
+    }
 
-    m_target = target;
+    m_menu = WeakRef(menu);
+    m_fileName = std::move(fileName);
     this->setTitle("Rename Macro");
-
-    // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     m_input = TextInput::create(230.f, "Macro name");
-    m_input->setString(target->getString());
-    m_input->setMaxCharCount(24);
+    m_input->setCommonFilter(CommonFilter::Name);
+    m_input->setMaxCharCount(toasty::replay::ttrl::MaximumReplayName);
+    m_input->setString(toasty::replay::ttrl::displayName(m_fileName));
     m_input->setPosition({150.f, 88.f});
+    m_input->setID("name-input");
     m_mainLayer->addChild(m_input);
 
-    auto menu = CCMenu::create();
-    menu->setPosition({0.f, 0.f});
-    menu->setContentSize(m_size);
-    m_mainLayer->addChild(menu);
+    auto menuNode = CCMenu::create();
+    menuNode->setPosition({0.f, 0.f});
+    menuNode->setContentSize(m_size);
+    m_mainLayer->addChild(menuNode);
 
-    auto saveSpr = ButtonSprite::create("Save", "bigFont.fnt", "GJ_button_01.png", .8f);
-    saveSpr->setScale(.7f);
-    auto saveBtn = CCMenuItemSpriteExtra::create(saveSpr, this, menu_selector(RenamePopup::onSave));
-    saveBtn->setPosition({150.f, 40.f});
-    menu->addChild(saveBtn);
+    auto saveSprite = ButtonSprite::create("Save", "bigFont.fnt", "GJ_button_01.png", .8f);
+    saveSprite->setScale(.7f);
+    auto saveButton =
+        CCMenuItemSpriteExtra::create(saveSprite, this, menu_selector(RenameMacroPopup::onSave));
+    saveButton->setPosition({85.f, 40.f});
+    saveButton->setID("save");
+    menuNode->addChild(saveButton);
 
+    auto folderSprite =
+        ButtonSprite::create("Open Folder", "bigFont.fnt", "GJ_button_04.png", .8f);
+    folderSprite->setScale(.7f);
+    auto folderButton = CCMenuItemSpriteExtra::create(
+        folderSprite, this, menu_selector(RenameMacroPopup::onOpenFolder));
+    folderButton->setPosition({205.f, 40.f});
+    folderButton->setID("open-folder");
+    menuNode->addChild(folderButton);
     return true;
 }
 
-void RenamePopup::onSave(CCObject* sender) {
-    std::string str = m_input->getString();
-    if (!str.empty()) {
-        m_target->setString(str.c_str());
-        m_target->limitLabelWidth(175.f, .65f, .1f);
+void RenameMacroPopup::onOpenFolder(CCObject*) {
+    if (!geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory())) {
+        Notification::create("Unable to open replay folder", NotificationIcon::Error)->show();
     }
-    this->onClose(nullptr);
+}
+
+void RenameMacroPopup::onSave(CCObject* sender) {
+    auto name = std::string(m_input->getString());
+    if (name.empty()) {
+        FLAlertLayer::create("Rename Failed", "Enter a macro name", "OK")->show();
+        return;
+    }
+
+    toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
+    auto result = storage.rename(m_fileName, name);
+    if (result.isErr()) {
+        FLAlertLayer::create("Rename Failed",
+                             toasty::replay::ttrl::describe(result.unwrapErr()),
+                             "OK")
+            ->show();
+        return;
+    }
+
+    auto renamed = result.unwrap();
+    if (toasty::engine::selectedReplay() == m_fileName) {
+        toasty::engine::setSelectedReplay(renamed);
+    }
+    if (auto menu = m_menu.lock()) {
+        menu->refreshMacroList();
+    }
+    this->onClose(sender);
 }

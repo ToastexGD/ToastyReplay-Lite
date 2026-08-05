@@ -11,19 +11,24 @@
 using namespace geode::prelude;
 
 class ToastyMenu : public geode::Popup {
+    friend class RenameMacroPopup;
+
   protected:
     enum Tab { TabMain, TabMacros, TabSettings, TabKeybinds, TabAbout, TabCount };
     struct Group {
         CCNode* node = nullptr;
         CCMenu* menu = nullptr;
     };
-    int m_mode = 0;
     int m_tab = TabMain;
     NineSlice* m_modeBgs[3] = {};
     CCLabelBMFont* m_modeLabels[3] = {};
     NineSlice* m_tabBgs[TabCount] = {};
     CCNode* m_pages[TabCount] = {};
     std::vector<CCLayer*> m_pageTouchNodes[TabCount];
+    ScrollLayer* m_macroScroll = nullptr;
+    std::vector<std::string> m_macroNames;
+    std::vector<NineSlice*> m_macroRowBgs;
+    int m_selectedMacro = -1;
     TextInput* m_seedInput = nullptr;
     TextInput* m_tpsInput = nullptr;
     CCMenuItemToggler* m_tpsToggle = nullptr;
@@ -45,25 +50,27 @@ class ToastyMenu : public geode::Popup {
     CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on);
     CCNode* makeTpsRow();
     CCNode* makeSectionRow(ZStringView title);
-    CCNode* makeMacroRow(ZStringView name);
+    CCNode* makeMacroRow(std::string const& fileName, int index);
     CCNode* makeKeybindRow(ZStringView title, ZStringView saveId, enumKeyCodes def);
     void updateModes();
     void updateTabs();
     void updatePages();
     void clampMainLayer();
 
+    void refreshMacroList();
     void onMode(CCObject* sender);
     void onTab(CCObject* sender);
+    void onSelectMacro(CCObject* sender);
     void onToggleOption(CCObject* sender);
     void onTpsToggle(CCObject* sender);
     void onTpsAdjust(CCObject* sender);
     void onTpsInfo(CCObject* sender);
-    void onAddMacro(CCObject* sender);
     void onRefreshMacros(CCObject* sender);
-    void onMacroOptions(CCObject* sender);
+    void onReplayMacro(CCObject* sender);
+    void onRenameMacro(CCObject* sender);
+    void onDeleteMacro(CCObject* sender);
     void onAccentPrev(CCObject* sender);
     void onAccentNext(CCObject* sender);
-    void onRename(CCObject* sender);
     void onSeedInfo(CCObject* sender);
     void onScaleSlider(CCObject* sender);
     void onBindKey(CCObject* sender);
@@ -79,14 +86,16 @@ class ToastyMenu : public geode::Popup {
     void show() override;
 };
 
-class RenamePopup : public geode::Popup {
+class RenameMacroPopup : public geode::Popup {
   protected:
-    CCLabelBMFont* m_target;
-    TextInput* m_input;
+    WeakRef<ToastyMenu> m_menu;
+    std::string m_fileName;
+    TextInput* m_input = nullptr;
 
-    bool init(CCLabelBMFont* target);
+    bool init(ToastyMenu* menu, std::string fileName);
+    void onOpenFolder(CCObject* sender);
     void onSave(CCObject* sender);
 
   public:
-    static RenamePopup* create(CCLabelBMFont* target);
+    static RenameMacroPopup* create(ToastyMenu* menu, std::string fileName);
 };

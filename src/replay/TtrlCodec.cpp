@@ -15,6 +15,7 @@ namespace toasty::replay::ttrl::codec {
     using toasty::replay::InputButton;
     using toasty::replay::InputEvent;
     using toasty::replay::InputPlayer;
+    using toasty::replay::PlayMode;
     using toasty::replay::Replay;
     using toasty::replay::TpsRate;
 
@@ -22,7 +23,8 @@ namespace toasty::replay::ttrl::codec {
     constexpr uint8_t Version = 1;
     constexpr uint8_t FrameFixFlag = 1;
     constexpr uint8_t InputChannelsFlag = 2;
-    constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag;
+    constexpr uint8_t PlatformerFlag = 4;
+    constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag | PlatformerFlag;
     constexpr uint8_t LegacyFrameFixSchema = 1;
     constexpr uint8_t FrameFixSchema = 2;
     constexpr size_t MinimumFileSize = 25;
@@ -336,6 +338,8 @@ namespace toasty::replay::ttrl::codec {
             flags |= FrameFixFlag;
         if (inputChannels)
             flags |= InputChannelsFlag;
+        if (replay.mode == PlayMode::Platformer)
+            flags |= PlatformerFlag;
         bytes.push_back(flags);
         appendVarint(bytes, tps.numerator);
         appendVarint(bytes, tps.denominator);
@@ -398,6 +402,8 @@ namespace toasty::replay::ttrl::codec {
         auto inputChannels = (flags & InputChannelsFlag) != 0;
 
         Replay replay;
+        replay.mode =
+            (flags & PlatformerFlag) != 0 ? PlayMode::Platformer : PlayMode::Normal;
 
         GEODE_UNWRAP_INTO(auto numerator, reader.readVarint());
         GEODE_UNWRAP_INTO(auto denominator, reader.readVarint());

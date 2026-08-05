@@ -155,6 +155,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         fields->session.levelRevision = static_cast<uint64_t>(level->m_levelVersion);
         fields->session.levelName = std::string(level->m_levelName);
         fields->session.levelData = std::string(level->m_levelString);
+        fields->session.platformer = m_isPlatformer;
         return true;
     }
 

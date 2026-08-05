@@ -21,6 +21,7 @@ namespace toasty::engine {
         uint64_t levelRevision = 0;
         std::string levelName;
         std::string levelData;
+        bool platformer = false;
         Replay recording;
         std::optional<Replay> playback;
         size_t nextInput = 0;

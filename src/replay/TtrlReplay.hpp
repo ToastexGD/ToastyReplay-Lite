@@ -20,6 +20,8 @@ namespace toasty::replay {
         bool operator==(TpsRate const&) const = default;
     };
 
+    enum class PlayMode : uint8_t { Normal, Platformer };
+
     enum class InputButton : uint8_t { Jump = 1, Left = 2, Right = 3 };
 
     enum class InputPlayer : uint8_t { Player1 = 1, Player2 = 2 };
@@ -46,6 +48,7 @@ namespace toasty::replay {
 
     struct Replay {
         TpsRate tps;
+        PlayMode mode = PlayMode::Normal;
         uint32_t gameVersion = 22081;
         uint64_t levelId = 0;
         uint64_t levelRevision = 0;

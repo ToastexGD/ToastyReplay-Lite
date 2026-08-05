@@ -32,6 +32,7 @@ namespace toasty::engine {
         Replay finishRecording(Session& session) {
             auto replay = std::move(session.recording);
             replay.tps = {static_cast<uint64_t>(session.recordingRate), 1};
+            replay.mode = session.platformer ? replay::PlayMode::Platformer : replay::PlayMode::Normal;
             replay.levelId = session.levelId;
             replay.levelRevision = session.levelRevision;
             replay.levelFingerprint = replay::ttrl::fingerprintLevelData(session.levelData);
@@ -69,6 +70,12 @@ namespace toasty::engine {
         }
 
         std::optional<std::string> validateReplay(Session const& session, Replay& replay) {
+            if (replay.mode == replay::PlayMode::Platformer && !session.platformer) {
+                return "The replay is for platformer mode";
+            }
+            if (replay.mode == replay::PlayMode::Normal && session.platformer) {
+                return "The replay is for normal mode";
+            }
             if (replay.levelId != 0 && session.levelId != 0 && replay.levelId != session.levelId) {
                 return "The replay is for a different level";
             }
