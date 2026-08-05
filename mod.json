@@ -24,6 +24,28 @@
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
 	},
+	"incompatibilities": {
+		"toastexgd.toastyreplay": {
+			"version": ">=v0.0.0",
+			"breaking": true
+		},
+		"toastexgd.toastyreplay-pro": {
+			"version": ">=v0.0.0",
+			"breaking": true
+		},
+		"syzzi.click_between_frames": {
+			"version": ">=v0.0.0",
+			"breaking": true
+		}
+	},
+	"settings": {
+		"frame-fixes": {
+			"type": "bool",
+			"name": "Frame Fixes",
+			"description": "Record and apply player position fixes after each physics tick.",
+			"default": false
+		}
+	},
 	"resources": {
 		"files": [
 			"resources/*.png"

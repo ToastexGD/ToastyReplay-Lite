@@ -1,80 +1,257 @@
 #include "Engine.hpp"
 
 #include "../replay/TtrlFingerprint.hpp"
+#include "../replay/TtrlStorage.hpp"
+#include "../timing/TpsBypass.hpp"
+
+#include <Geode/Geode.hpp>
+#include <Geode/binding/PlayLayer.hpp>
+#include <Geode/ui/Notification.hpp>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <utility>
 
+using namespace geode::prelude;
+
 namespace toasty::engine {
     namespace {
-        constexpr size_t MaximumCapturedInputs = 100000;
+        std::string s_selectedReplay;
 
-        Mode s_mode = Mode::Off;
-        Replay s_recording;
-        bool s_attemptActive = false;
-        uint64_t s_maxTick = 0;
-        std::string s_levelName;
-        std::string s_levelData;
+        void resetAttempt(Session& session) {
+            session.tick = 0;
+            session.nextInput = 0;
+            session.nextFix = 0;
+            session.heldInputs.fill(false);
+            if (session.mode == Mode::Record) {
+                session.recording.inputs.clear();
+                session.recording.frameFixes.clear();
+            }
+        }
+
+        Replay finishRecording(Session& session) {
+            auto replay = std::move(session.recording);
+            replay.tps = {static_cast<uint64_t>(session.recordingRate), 1};
+            replay.levelId = session.levelId;
+            replay.levelRevision = session.levelRevision;
+            replay.levelFingerprint = replay::ttrl::fingerprintLevelData(session.levelData);
+            replay.tickCount = std::max<uint64_t>(session.tick + (session.processingTick ? 1 : 0), 1);
+            session.recording = {};
+            session.mode = Mode::Off;
+            return replay;
+        }
+
+        void restorePlayback(Session& session, PlayLayer* layer) {
+            session.mode = Mode::Off;
+            if (layer) {
+                for (size_t index = 0; index < session.heldInputs.size(); ++index) {
+                    if (!session.heldInputs[index]) {
+                        continue;
+                    }
+                    auto button = static_cast<int>(index % 3) + 1;
+                    auto isPlayer1 = index < 3;
+                    layer->handleButton(false, button, isPlayer1);
+                }
+            }
+            session.playback.reset();
+            session.nextInput = 0;
+            session.nextFix = 0;
+            session.tick = 0;
+            session.heldInputs.fill(false);
+            if (session.tpsOverride) {
+                toasty::tps::endReplayOverride();
+                session.tpsOverride = false;
+            }
+            if (layer && session.changedTestMode) {
+                layer->m_isTestMode = session.previousTestMode;
+            }
+            session.changedTestMode = false;
+        }
+
+        std::optional<std::string> validateReplay(Session const& session, Replay& replay) {
+            if (replay.levelId != 0 && session.levelId != 0 && replay.levelId != session.levelId) {
+                return "The replay is for a different level";
+            }
+            if (replay.levelRevision != 0 && replay.levelRevision != session.levelRevision) {
+                return "The replay is for a different level version";
+            }
+            if (replay.levelFingerprint != 0 &&
+                !replay::ttrl::matchesLevelFingerprint(replay.levelFingerprint, session.levelData)) {
+                return "The replay does not match this level";
+            }
+            auto rate = replay.tps.normalized();
+            if (!rate || rate->denominator != 1 || rate->numerator < toasty::tps::Minimum ||
+                rate->numerator > toasty::tps::Maximum) {
+                return "The replay TPS is not supported";
+            }
+            replay.tps = *rate;
+            return std::nullopt;
+        }
     } // namespace
 
-    Mode mode() {
-        return s_mode;
+    Session::~Session() {
+        if (tpsOverride) {
+            toasty::tps::endReplayOverride();
+        }
     }
 
-    void setMode(Mode mode) {
-        s_mode = mode;
+    Mode mode() {
+        if (auto session = activeSession()) {
+            return session->mode;
+        }
+        return Mode::Off;
     }
 
     bool recording() {
-        return s_mode == Mode::Record;
+        return mode() == Mode::Record;
     }
 
-    void beginLevelSession(uint64_t levelId,
-                           uint64_t levelRevision,
-                           std::string levelName,
-                           std::string levelData) {
-        s_recording = {};
-        s_recording.levelId = levelId;
-        s_recording.levelRevision = levelRevision;
-        s_levelName = std::move(levelName);
-        s_levelData = std::move(levelData);
-        s_attemptActive = false;
-        s_maxTick = 0;
+    bool playing() {
+        return mode() == Mode::Play;
     }
 
-    void beginAttempt() {
-        s_attemptActive = true;
+    bool startRecording() {
+        auto layer = PlayLayer::get();
+        auto session = activeSession();
+        if (!layer || !session) {
+            FLAlertLayer::create("No Level", "Enter a level before recording", "OK")->show();
+            return false;
+        }
+        if (session->mode == Mode::Play) {
+            restorePlayback(*session, layer);
+        }
+        session->mode = Mode::Off;
+        layer->resetLevelFromStart();
+        session->recording = {};
+        session->recordingRate = toasty::tps::effectiveRate();
+        session->mode = Mode::Record;
+        resetAttempt(*session);
+        Notification::create("Recording started", NotificationIcon::Info)->show();
+        return true;
     }
 
-    void endAttempt() {
-        s_attemptActive = false;
+    bool stopRecording(bool save) {
+        auto session = activeSession();
+        if (!session || session->mode != Mode::Record) {
+            return false;
+        }
+        if (!save) {
+            session->recording = {};
+            session->mode = Mode::Off;
+            return true;
+        }
+
+        auto replay = finishRecording(*session);
+        replay::ttrl::Storage storage(replay::ttrl::defaultReplayDirectory());
+        auto result = storage.save(session->levelName, replay);
+        if (result.isErr()) {
+            auto message = replay::ttrl::describe(result.unwrapErr());
+            log::error("Failed to save replay: {}", message);
+            Notification::create("Failed to save replay", NotificationIcon::Error)->show();
+            return false;
+        }
+        auto name = result.unwrap();
+        setSelectedReplay(name);
+        log::info("Saved replay {}", name);
+        Notification::create(fmt::format("Saved {}", name), NotificationIcon::Success)->show();
+        return true;
     }
 
-    void cancelAttempt() {
-        s_attemptActive = false;
+    bool loadReplayAndBegin(std::string name) {
+        auto layer = PlayLayer::get();
+        auto session = activeSession();
+        if (!layer || !session) {
+            FLAlertLayer::create("No Level", "Enter a level to play a replay", "OK")->show();
+            return false;
+        }
+        if (session->mode == Mode::Record) {
+            stopRecording(true);
+        }
+        if (session->mode == Mode::Play) {
+            restorePlayback(*session, layer);
+        }
+        if (layer->m_isPracticeMode) {
+            layer->togglePracticeMode(false);
+        }
+
+        replay::ttrl::Storage storage(replay::ttrl::defaultReplayDirectory());
+        auto loaded = storage.load(name);
+        if (loaded.isErr()) {
+            auto message = replay::ttrl::describe(loaded.unwrapErr());
+            log::error("Failed to load replay: {}", message);
+            FLAlertLayer::create("Load Failed", message, "OK")->show();
+            return false;
+        }
+
+        auto replay = std::move(loaded.unwrap());
+        if (auto error = validateReplay(*session, replay)) {
+            log::error("Replay rejected: {}", *error);
+            FLAlertLayer::create("Replay Rejected", *error, "OK")->show();
+            return false;
+        }
+        if (!toasty::tps::beginReplayOverride(static_cast<int64_t>(replay.tps.numerator))) {
+            auto reason = toasty::tps::unavailableReason();
+            if (reason.empty()) {
+                reason = "The replay TPS could not be applied";
+            }
+            FLAlertLayer::create("TPS Bypass Unavailable", reason, "OK")->show();
+            return false;
+        }
+
+        session->previousTestMode = layer->m_isTestMode;
+        session->changedTestMode = true;
+        session->tpsOverride = true;
+        layer->m_isTestMode = true;
+        session->playback = std::move(replay);
+        session->mode = Mode::Off;
+        layer->resetLevel();
+        session->mode = Mode::Play;
+        resetAttempt(*session);
+        setSelectedReplay(std::move(name));
+        log::info("Loaded replay {} with {} inputs", selectedReplay(), session->playback->inputs.size());
+        Notification::create("Replay started", NotificationIcon::Info)->show();
+        return true;
     }
 
-    void capture(uint64_t tick, InputButton button, InputPlayer player, bool pressed) {
-        if (s_recording.inputs.size() >= MaximumCapturedInputs) {
+    void stopPlayback() {
+        auto session = activeSession();
+        if (!session || session->mode != Mode::Play) {
             return;
         }
-        s_recording.inputs.push_back({tick, button, player, pressed});
-        s_maxTick = std::max(s_maxTick, tick);
+        restorePlayback(*session, PlayLayer::get());
     }
 
-    std::optional<Replay> takeRecording() {
-        if (s_recording.inputs.empty()) {
-            return std::nullopt;
+    void togglePlayback() {
+        if (playing()) {
+            stopPlayback();
+            Notification::create("Replay stopped", NotificationIcon::Info)->show();
+            return;
         }
-        s_recording.tickCount = s_maxTick + 1;
-        s_recording.levelFingerprint = toasty::replay::ttrl::fingerprintLevelData(s_levelData);
-        auto result = std::move(s_recording);
-        s_recording = {};
-        s_maxTick = 0;
-        return result;
+        auto selected = selectedReplay();
+        if (!selected.empty()) {
+            loadReplayAndBegin(selected);
+            return;
+        }
+        replay::ttrl::Storage storage(replay::ttrl::defaultReplayDirectory());
+        auto files = storage.list();
+        if (files.isErr()) {
+            FLAlertLayer::create("Load Failed", replay::ttrl::describe(files.unwrapErr()), "OK")
+                ->show();
+            return;
+        }
+        auto names = std::move(files.unwrap());
+        if (names.empty()) {
+            FLAlertLayer::create("No Replays", "Record a replay first", "OK")->show();
+            return;
+        }
+        loadReplayAndBegin(names.front());
     }
 
-    std::string const& levelName() {
-        return s_levelName;
+    void setSelectedReplay(std::string name) {
+        s_selectedReplay = std::move(name);
+    }
+
+    std::string const& selectedReplay() {
+        return s_selectedReplay;
     }
 } // namespace toasty::engine

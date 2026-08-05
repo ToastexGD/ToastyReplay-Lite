@@ -298,7 +298,7 @@ namespace toasty::tps::patch {
 #endif
 
         s_available = true;
-        setRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Minimum));
+        setRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Vanilla));
         if (!setEnabled(Mod::get()->getSavedValue<bool>("tps-bypass", false))) {
             return false;
         }

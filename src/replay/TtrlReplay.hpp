@@ -35,6 +35,7 @@ namespace toasty::replay {
 
     struct FrameFix {
         uint64_t afterTick = 0;
+        InputPlayer player = InputPlayer::Player1;
         float x = 0.f;
         float y = 0.f;
         float rotation = 0.f;

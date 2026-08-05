@@ -23,7 +23,8 @@ namespace toasty::replay::ttrl::codec {
     constexpr uint8_t FrameFixFlag = 1;
     constexpr uint8_t InputChannelsFlag = 2;
     constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag;
-    constexpr uint8_t FrameFixSchema = 1;
+    constexpr uint8_t LegacyFrameFixSchema = 1;
+    constexpr uint8_t FrameFixSchema = 2;
     constexpr size_t MinimumFileSize = 25;
     constexpr size_t MaximumFrameFixSize = MaximumFileSize - MaximumInputSize;
     constexpr size_t MinimumFrameFixRecordSize = 21;
@@ -193,9 +194,18 @@ namespace toasty::replay::ttrl::codec {
     }
 
     Result<FrameFix, CodecFailure>
-    readFrameFix(Reader& reader, uint64_t previousTick, uint64_t tickCount) {
+    readFrameFix(Reader& reader,
+                 uint8_t schema,
+                 uint64_t previousTick,
+                 uint64_t tickCount) {
         auto offset = reader.position();
-        GEODE_UNWRAP_INTO(auto delta, reader.readVarint());
+        GEODE_UNWRAP_INTO(auto value, reader.readVarint());
+        auto player = InputPlayer::Player1;
+        auto delta = value;
+        if (schema == FrameFixSchema) {
+            player = (value & 1) != 0 ? InputPlayer::Player2 : InputPlayer::Player1;
+            delta = value >> 1;
+        }
         GEODE_UNWRAP_INTO(auto tick, checkedTick(previousTick, delta, tickCount, offset));
         GEODE_UNWRAP_INTO(auto x, reader.readFloat());
         GEODE_UNWRAP_INTO(auto y, reader.readFloat());
@@ -208,6 +218,7 @@ namespace toasty::replay::ttrl::codec {
         }
 
         return Ok(FrameFix{.afterTick = tick,
+                           .player = player,
                            .x = x,
                            .y = y,
                            .rotation = rotation,
@@ -262,6 +273,12 @@ namespace toasty::replay::ttrl::codec {
                 !std::isfinite(fix.verticalVelocity)) {
                 return failure(CodecError::InvalidFrameFix, index);
             }
+            if (!validInputPlayer(fix.player)) {
+                return failure(CodecError::InvalidFrameFix, index);
+            }
+            if (fix.afterTick - previousTick > (std::numeric_limits<uint64_t>::max() >> 1)) {
+                return failure(CodecError::TickOverflow, index);
+            }
             previousTick = fix.afterTick;
         }
 
@@ -300,7 +317,9 @@ namespace toasty::replay::ttrl::codec {
                 if (frameFixBytes.size() > MaximumFrameFixSize - 30) {
                     return failure(CodecError::FileTooLarge, frameFixBytes.size());
                 }
-                appendVarint(frameFixBytes, fix.afterTick - previousTick);
+                auto delta = fix.afterTick - previousTick;
+                auto player = fix.player == InputPlayer::Player2 ? 1u : 0u;
+                appendVarint(frameFixBytes, (delta << 1) | player);
                 appendFloat(frameFixBytes, fix.x);
                 appendFloat(frameFixBytes, fix.y);
                 appendFloat(frameFixBytes, fix.rotation);
@@ -452,7 +471,7 @@ namespace toasty::replay::ttrl::codec {
 
         if ((flags & FrameFixFlag) != 0) {
             GEODE_UNWRAP_INTO(auto schema, reader.readByte());
-            if (schema != FrameFixSchema) {
+            if (schema != LegacyFrameFixSchema && schema != FrameFixSchema) {
                 return failure(CodecError::UnsupportedFrameFixSchema, reader.position() - 1);
             }
 
@@ -480,7 +499,10 @@ namespace toasty::replay::ttrl::codec {
             previousTick = 0;
             for (uint64_t index = 0; index < count; ++index) {
                 GEODE_UNWRAP_INTO(auto frameFix,
-                                  readFrameFix(frameFixReader, previousTick, replay.tickCount));
+                                  readFrameFix(frameFixReader,
+                                               schema,
+                                               previousTick,
+                                               replay.tickCount));
                 previousTick = frameFix.afterTick;
                 replay.frameFixes.push_back(frameFix);
             }

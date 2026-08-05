@@ -13,7 +13,6 @@ using namespace geode::prelude;
 
 namespace toasty::replay::ttrl {
     constexpr size_t MaximumReplayFiles = 4096;
-    constexpr size_t MaximumReplayName = 80;
     constexpr size_t MaximumNameAttempts = 10000;
 
     static auto failure(StorageError error,
@@ -137,38 +136,17 @@ namespace toasty::replay::ttrl {
         return failure(StorageError::TooManyFiles);
     }
 
-    static Result<asp::fs::path, StorageFailure> temporaryPath(asp::fs::path const& target) {
-        auto targetStr = utils::string::pathToString(target);
-        for (size_t index = 0; index < MaximumNameAttempts; ++index) {
-            StringBuffer<256> buf;
-            if (index == 0) {
-                buf.append("{}.tmp", targetStr);
-            } else {
-                buf.append("{}.tmp{}", targetStr, index + 1);
-            }
-            asp::fs::path path(buf.str());
-            auto statusRes = asp::fs::status(path);
-            if (statusRes.isErr()) {
-                if (statusRes.unwrapErr().getCode() == std::errc::no_such_file_or_directory) {
-                    return Ok(path);
-                }
-                return failure(StorageError::DirectoryUnavailable, statusRes.unwrapErr().message());
-            }
-        }
-        return failure(StorageError::TooManyFiles);
-    }
-
-    static asp::fs::Result<void> removeTemporary(asp::fs::path const& path) {
-        auto res = asp::fs::remove(path);
-        if (res.isErr()) {
-            log::warn("Failed to remove temporary replay file at {}: {}", path,
-                      res.unwrapErr().message());
-        }
-        return res;
-    }
-
     static std::string pathFileName(asp::fs::path const& path) {
         return utils::string::pathToString(path.filename());
+    }
+
+    static bool validReplayFileName(ZStringView fileName) {
+        auto view = fileName.view();
+        if (!endsWithTtrl(fileName) || view.find('/') != std::string_view::npos ||
+            view.find('\\') != std::string_view::npos || view.find(':') != std::string_view::npos) {
+            return false;
+        }
+        return replayLoadFileName(fileName) == std::string(view);
     }
 
     Storage::Storage(asp::fs::path directory)
@@ -187,18 +165,9 @@ namespace toasty::replay::ttrl {
         }
 
         GEODE_UNWRAP_INTO(auto target, availablePath(m_directory, name));
-        GEODE_UNWRAP_INTO(auto temporary, temporaryPath(target));
-
-        auto writeRes = asp::fs::write(temporary, encoded.unwrap());
+        auto writeRes = utils::file::writeBinarySafe(target, encoded.unwrap());
         if (writeRes.isErr()) {
-            static_cast<void>(removeTemporary(temporary));
             return failure(StorageError::WriteFailed, writeRes.unwrapErr());
-        }
-
-        auto renameRes = asp::fs::rename(temporary, target);
-        if (renameRes.isErr()) {
-            static_cast<void>(removeTemporary(temporary));
-            return failure(StorageError::RenameFailed, renameRes.unwrapErr().message());
         }
 
         return Ok(pathFileName(target));
@@ -222,7 +191,7 @@ namespace toasty::replay::ttrl {
             return failure(StorageError::InvalidFile);
         }
 
-        auto readRes = asp::fs::read(path);
+        auto readRes = utils::file::readBinary(path);
         if (readRes.isErr()) {
             return failure(StorageError::ReadFailed, readRes.unwrapErr());
         }
@@ -239,6 +208,75 @@ namespace toasty::replay::ttrl {
         return Ok(std::move(replay.unwrap()));
     }
 
+    RemoveResult Storage::remove(ZStringView fileName) const {
+        if (!validReplayFileName(fileName)) {
+            return failure(StorageError::InvalidFile);
+        }
+        GEODE_UNWRAP(ensureDirectory(m_directory));
+
+        auto path = m_directory / std::string(fileName.view());
+        auto statusRes = asp::fs::status(path);
+        if (statusRes.isErr()) {
+            auto err = statusRes.unwrapErr();
+            if (err.getCode() == std::errc::no_such_file_or_directory) {
+                return failure(StorageError::FileNotFound);
+            }
+            return failure(StorageError::DeleteFailed, err.message());
+        }
+
+        auto status = statusRes.unwrap();
+        if (status.isSymlink() || !status.isFile()) {
+            return failure(StorageError::InvalidFile);
+        }
+
+        auto removeRes = asp::fs::remove(path);
+        if (removeRes.isErr()) {
+            return failure(StorageError::DeleteFailed, removeRes.unwrapErr().message());
+        }
+        return Ok();
+    }
+
+    RenameResult Storage::rename(ZStringView fileName, ZStringView name) const {
+        if (!validReplayFileName(fileName)) {
+            return failure(StorageError::InvalidFile);
+        }
+        GEODE_UNWRAP(ensureDirectory(m_directory));
+
+        auto source = m_directory / std::string(fileName.view());
+        auto sourceStatus = asp::fs::status(source);
+        if (sourceStatus.isErr()) {
+            auto err = sourceStatus.unwrapErr();
+            if (err.getCode() == std::errc::no_such_file_or_directory) {
+                return failure(StorageError::FileNotFound);
+            }
+            return failure(StorageError::RenameFailed, err.message());
+        }
+        auto status = sourceStatus.unwrap();
+        if (status.isSymlink() || !status.isFile()) {
+            return failure(StorageError::InvalidFile);
+        }
+
+        auto targetName = replayFileName(name, 0);
+        if (targetName == std::string(fileName.view())) {
+            return Ok(std::move(targetName));
+        }
+
+        auto target = m_directory / targetName;
+        auto targetStatus = asp::fs::status(target);
+        if (targetStatus.isOk()) {
+            return failure(StorageError::NameTaken);
+        }
+        if (targetStatus.unwrapErr().getCode() != std::errc::no_such_file_or_directory) {
+            return failure(StorageError::RenameFailed, targetStatus.unwrapErr().message());
+        }
+
+        auto renameResult = asp::fs::rename(source, target);
+        if (renameResult.isErr()) {
+            return failure(StorageError::RenameFailed, renameResult.unwrapErr().message());
+        }
+        return Ok(std::move(targetName));
+    }
+
     ListResult Storage::list() const {
         GEODE_UNWRAP(ensureDirectory(m_directory));
 
@@ -247,9 +285,9 @@ namespace toasty::replay::ttrl {
             return failure(StorageError::DirectoryUnavailable, dirRes.unwrapErr().message());
         }
 
-        std::vector<std::string> files;
-        for (auto const& entry : asp::iter::from(dirRes.unwrap())) {
-            auto const& path = entry.get().path();
+        std::vector<std::pair<std::filesystem::file_time_type, std::string>> files;
+        for (auto const& entry : asp::iter::consume(dirRes.unwrap())) {
+            auto const& path = entry.path();
             auto isFileRes = asp::fs::isFile(path);
             if (isFileRes.isOk() && isFileRes.unwrap()) {
                 auto name = pathFileName(path);
@@ -257,13 +295,34 @@ namespace toasty::replay::ttrl {
                     if (files.size() == MaximumReplayFiles) {
                         return failure(StorageError::TooManyFiles);
                     }
-                    files.push_back(std::move(name));
+                    auto writeTime = asp::fs::lastWriteTime(path);
+                    files.emplace_back(writeTime.isOk() ? writeTime.unwrap()
+                                                        : std::filesystem::file_time_type::min(),
+                                       std::move(name));
                 }
             }
         }
 
-        std::sort(files.begin(), files.end());
-        return Ok(std::move(files));
+        std::sort(files.begin(), files.end(), [](auto const& left, auto const& right) {
+            if (left.first != right.first) {
+                return left.first > right.first;
+            }
+            return left.second < right.second;
+        });
+        std::vector<std::string> names;
+        names.reserve(files.size());
+        for (auto& file : files) {
+            names.push_back(std::move(file.second));
+        }
+        return Ok(std::move(names));
+    }
+
+    std::string displayName(ZStringView fileName) {
+        auto view = fileName.view();
+        if (endsWithTtrl(fileName)) {
+            view.remove_suffix(5);
+        }
+        return std::string(view);
     }
 
     ZStringView errorMessage(StorageError error) {
@@ -274,6 +333,8 @@ namespace toasty::replay::ttrl {
             return "There are too many replay files";
         case StorageError::FileNotFound:
             return "The replay file was not found";
+        case StorageError::NameTaken:
+            return "A replay already uses that name";
         case StorageError::InvalidFile:
             return "The replay path is not a regular file";
         case StorageError::FileTooLarge:
@@ -286,6 +347,8 @@ namespace toasty::replay::ttrl {
             return "The replay file could not be written";
         case StorageError::RenameFailed:
             return "The replay file could not be finalized";
+        case StorageError::DeleteFailed:
+            return "The replay file could not be deleted";
         case StorageError::InvalidReplay:
             return "The replay data is invalid";
         }

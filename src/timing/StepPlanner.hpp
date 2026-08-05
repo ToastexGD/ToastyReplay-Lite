@@ -6,6 +6,8 @@
 #include <limits>
 
 namespace toasty::timing {
+    constexpr uint32_t MaximumStepsPerUpdate = 100000;
+
     struct StepPlan {
         uint32_t steps = 0;
         double delta = 0.0;
@@ -22,8 +24,7 @@ namespace toasty::timing {
 
             m_remainder += delta;
             auto rounded = std::round(m_remainder / timestep);
-            auto bounded =
-                std::clamp(rounded, 0.0, static_cast<double>(std::numeric_limits<uint32_t>::max()));
+            auto bounded = std::clamp(rounded, 0.0, static_cast<double>(MaximumStepsPerUpdate));
             auto steps = static_cast<uint32_t>(bounded);
             auto planned = static_cast<double>(steps) * timestep;
             m_remainder -= planned;

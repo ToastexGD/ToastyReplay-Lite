@@ -728,23 +728,16 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
     auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
     if (static_cast<int>(key) == recordKey) {
         if (toasty::engine::recording()) {
-            toasty::engine::saveRecordingIfAny();
+            toasty::engine::stopRecording(true);
         } else {
-            toasty::engine::setMode(toasty::engine::Mode::Record);
-            geode::Notification::create("Recording", NotificationIcon::Info)->show();
+            toasty::engine::startRecording();
         }
         return true;
     }
 
     auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
     if (static_cast<int>(key) == replayKey) {
-        auto next = toasty::engine::mode() == toasty::engine::Mode::Play ? toasty::engine::Mode::Off
-                                                                         : toasty::engine::Mode::Play;
-        toasty::engine::setMode(next);
-        geode::Notification::create(next == toasty::engine::Mode::Play ? "Replaying"
-                                                                       : "Replay off",
-                                    NotificationIcon::Info)
-            ->show();
+        toasty::engine::togglePlayback();
         return true;
     }
 

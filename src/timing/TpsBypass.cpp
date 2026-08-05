@@ -8,12 +8,14 @@
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 using namespace geode::prelude;
 
 namespace {
     bool s_enabled = false;
-    int64_t s_rate = toasty::tps::Minimum;
+    int64_t s_rate = toasty::tps::Vanilla;
+    std::optional<int64_t> s_replayRate;
 
     int64_t boundedRate(int64_t value) {
         return std::clamp<int64_t>(value, toasty::tps::Minimum, toasty::tps::Maximum);
@@ -21,6 +23,13 @@ namespace {
 
     bool customTimingActive() {
         return toasty::tps::patch::interceptsTicks();
+    }
+
+    int64_t activeRate() {
+        if (s_replayRate) {
+            return *s_replayRate;
+        }
+        return s_enabled ? s_rate : toasty::tps::Vanilla;
     }
 } // namespace
 
@@ -36,7 +45,7 @@ namespace toasty::tps {
     bool setEnabled(bool value) {
         if (value && !patch::available())
             return false;
-        if (!patch::setEnabled(value))
+        if (!s_replayRate && !patch::setEnabled(value))
             return false;
         s_enabled = value;
         if (Mod::get()->getSavedValue<bool>("tps-bypass", false) != value) {
@@ -49,12 +58,45 @@ namespace toasty::tps {
         return s_rate;
     }
 
+    int64_t effectiveRate() {
+        return activeRate();
+    }
+
     void setRate(int64_t value) {
         auto bounded = boundedRate(value);
         s_rate = bounded;
-        patch::setRate(bounded);
-        if (Mod::get()->getSavedValue<int64_t>("tps-rate", Minimum) != bounded) {
+        if (!s_replayRate) {
+            patch::setRate(bounded);
+        }
+        if (Mod::get()->getSavedValue<int64_t>("tps-rate", Vanilla) != bounded) {
             Mod::get()->setSavedValue<int64_t>("tps-rate", bounded);
+        }
+    }
+
+    bool beginReplayOverride(int64_t value) {
+        if (!patch::available() || value < Minimum || value > Maximum) {
+            return false;
+        }
+        auto bounded = boundedRate(value);
+        patch::setRate(bounded);
+        if (!patch::setEnabled(true)) {
+            patch::setRate(s_rate);
+            static_cast<void>(patch::setEnabled(s_enabled));
+            return false;
+        }
+        s_replayRate = bounded;
+        return true;
+    }
+
+    void endReplayOverride() {
+        if (!s_replayRate) {
+            return;
+        }
+        s_replayRate.reset();
+        patch::setRate(s_rate);
+        if (!patch::setEnabled(s_enabled)) {
+            s_enabled = false;
+            Mod::get()->setSavedValue<bool>("tps-bypass", false);
         }
     }
 
@@ -80,7 +122,7 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
     void update(float dt) override {
         auto fields = m_fields.self();
         auto active = customTimingActive();
-        auto target = s_enabled ? s_rate : toasty::tps::Minimum;
+        auto target = activeRate();
         auto timeWarp = std::min(static_cast<double>(m_gameState.m_timeWarp), 1.0);
 
         if (!active || !std::isfinite(dt) || dt < 0.f || !std::isfinite(timeWarp) ||
@@ -120,7 +162,8 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
 
 class $modify(ToastyTpsPlayLayer, PlayLayer) {
     bool needsProgressFix() const {
-        return s_enabled && s_rate != toasty::tps::Minimum && m_level && m_level->m_timestamp > 0;
+        return (s_enabled || s_replayRate.has_value()) && activeRate() != toasty::tps::Vanilla &&
+               m_level && m_level->m_timestamp > 0;
     }
 
     unsigned int correctedProgress() const {
@@ -156,7 +199,7 @@ class $modify(ToastyTpsPlayLayer, PlayLayer) {
 
 $on_mod(Loaded) {
     toasty::tps::patch::initialize();
-    s_rate = boundedRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Minimum));
+    s_rate = boundedRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Vanilla));
     toasty::tps::patch::setRate(s_rate);
     s_enabled = Mod::get()->getSavedValue<bool>("tps-bypass", false);
     if (!toasty::tps::setEnabled(s_enabled)) {
