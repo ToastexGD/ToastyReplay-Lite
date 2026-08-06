@@ -4,10 +4,10 @@
 #include <Geode/ui/Notification.hpp>
 #include "engine/Engine.hpp"
 #include "replay/TtrlStorage.hpp"
+#include "timing/Speedhack.hpp"
 #include "timing/TpsBypass.hpp"
 
 #include <algorithm>
-#include <charconv>
 
 static constexpr float POPUP_W = 450.f;
 static constexpr float POPUP_H = 290.f;
@@ -102,6 +102,14 @@ static std::string keyName(enumKeyCodes key) {
     return name.empty() ? "?" : name;
 }
 
+static std::string speedText(double speed) {
+    auto value = fmt::format("{:.3f}", speed);
+    while (value.size() > 2 && value.back() == '0' && value[value.size() - 2] != '.') {
+        value.pop_back();
+    }
+    return value;
+}
+
 static std::string modVersion() {
     return Mod::get()->getVersion().toVString();
 }
@@ -177,7 +185,7 @@ bool ToastyMenu::init() {
         auto scroll = this->addScroll(page, TabMain, {ROW_X, 26.f}, {ROW_W, 156.f});
 
         scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
-        scroll->m_contentLayer->addChild(this->makeToggleRow("speedhack", "Speedhack", false));
+        scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
         scroll->m_contentLayer->addChild(
             this->makeToggleRow("show-hitboxes", "Show Hitboxes", false));
@@ -533,6 +541,56 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on) {
     return row.node;
 }
 
+CCNode* ToastyMenu::makeSpeedhackRow() {
+    auto row = this->makeRow("Speedhack", 32.f, 100.f);
+    row.node->setID("speedhack");
+
+    if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        leftSpr->setScale(.38f);
+        auto left = CCMenuItemSpriteExtra::create(
+            leftSpr, this, menu_selector(ToastyMenu::onSpeedhackAdjust));
+        left->setTag(-1);
+        left->setPosition({137.f, 16.f});
+        row.menu->addChild(left);
+    }
+
+    m_speedInput = TextInput::create(118.f, "Speed");
+    m_speedInput->setCommonFilter(CommonFilter::Float);
+    m_speedInput->setMaxCharCount(8);
+    m_speedInput->setScale(.55f);
+    m_speedInput->setPosition({194.f, 16.f});
+    m_speedInput->setString(speedText(toasty::speedhack::rate()));
+    m_speedInput->setCallback([](std::string const& value) {
+        auto result = utils::numFromString<double>(value);
+        if (!result) {
+            return;
+        }
+        auto parsed = result.unwrapOr(toasty::speedhack::Default);
+        if (parsed >= toasty::speedhack::Minimum && parsed <= toasty::speedhack::Maximum) {
+            toasty::speedhack::setRate(parsed);
+        }
+    });
+    row.node->addChild(m_speedInput);
+
+    if (auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        rightSpr->setScale(.38f);
+        rightSpr->setFlipX(true);
+        auto right = CCMenuItemSpriteExtra::create(
+            rightSpr, this, menu_selector(ToastyMenu::onSpeedhackAdjust));
+        right->setTag(1);
+        right->setPosition({250.f, 16.f});
+        row.menu->addChild(right);
+    }
+
+    m_speedToggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onSpeedhackToggle), .6f);
+    m_speedToggle->setPosition({ROW_W - 18.f, 16.f});
+    m_speedToggle->toggle(toasty::speedhack::enabled());
+    row.menu->addChild(m_speedToggle);
+
+    return row.node;
+}
+
 CCNode* ToastyMenu::makeTpsRow() {
     auto row = this->makeRow("TPS Bypass", 32.f, 92.f);
     row.node->setID("tps-bypass");
@@ -561,10 +619,12 @@ CCNode* ToastyMenu::makeTpsRow() {
     m_tpsInput->setPosition({194.f, 16.f});
     m_tpsInput->setString(fmt::format("{}", toasty::tps::rate()));
     m_tpsInput->setCallback([this](std::string const& value) {
-        int64_t parsed = 0;
-        auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
-        if (result.ec == std::errc() && result.ptr == value.data() + value.size() &&
-            parsed >= toasty::tps::Minimum && parsed <= toasty::tps::Maximum) {
+        auto result = utils::numFromString<int64_t>(value);
+        if (!result) {
+            return;
+        }
+        auto parsed = result.unwrapOr(toasty::tps::Vanilla);
+        if (parsed >= toasty::tps::Minimum && parsed <= toasty::tps::Maximum) {
             toasty::tps::setRate(parsed);
         }
     });
@@ -800,6 +860,15 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
         return true;
     }
 
+    auto speedKey = Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_Shift));
+    if (static_cast<int>(key) == speedKey) {
+        toasty::speedhack::setEnabled(!toasty::speedhack::enabled());
+        if (s_instance && s_instance->m_speedToggle) {
+            s_instance->m_speedToggle->toggle(toasty::speedhack::enabled());
+        }
+        return true;
+    }
+
     return false;
 }
 
@@ -916,6 +985,21 @@ void ToastyMenu::onToggleOption(CCObject* sender) {
         auto next = !toggle->isToggled();
         Mod::get()->setSavedValue<bool>(id, next);
     }
+}
+
+void ToastyMenu::onSpeedhackToggle(CCObject* sender) {
+    auto toggle = static_cast<CCMenuItemToggler*>(sender);
+    toasty::speedhack::setEnabled(!toggle->isToggled());
+}
+
+void ToastyMenu::onSpeedhackAdjust(CCObject* sender) {
+    auto direction = static_cast<CCNode*>(sender)->getTag();
+    auto next = std::clamp(toasty::speedhack::rate() + static_cast<double>(direction) * .1,
+                           toasty::speedhack::Minimum,
+                           toasty::speedhack::Maximum);
+    next = std::round(next * 1000.0) / 1000.0;
+    toasty::speedhack::setRate(next);
+    m_speedInput->setString(speedText(next));
 }
 
 void ToastyMenu::onTpsToggle(CCObject* sender) {

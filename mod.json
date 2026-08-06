@@ -32,13 +32,15 @@
 		"toastexgd.toastyreplay-pro": {
 			"version": ">=v0.0.0",
 			"breaking": true
-		},
-		"syzzi.click_between_frames": {
-			"version": ">=v0.0.0",
-			"breaking": true
 		}
 	},
 	"settings": {
+		"silently-disable-cbf-cbs": {
+			"type": "bool",
+			"name": "Silently Disable CBF/CBS",
+			"description": "Keep Click Between Frames and Click Between Steps disabled while ToastyReplay Lite is loaded.",
+			"default": true
+		},
 		"frame-fixes": {
 			"type": "bool",
 			"name": "Frame Fixes",
