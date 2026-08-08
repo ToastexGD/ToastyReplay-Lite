@@ -1,11 +1,12 @@
 #include "ToastyMenu.hpp"
 #include <asp/iter.hpp>
 #include <fmt/ranges.h>
-#include <Geode/ui/Notification.hpp>
+#include <Geode/ui/ColorPickPopup.hpp>
 #include "engine/Engine.hpp"
 #include "replay/TtrlStorage.hpp"
 #include "timing/Speedhack.hpp"
 #include "timing/TpsBypass.hpp"
+#include "ui/Notifications.hpp"
 
 #include <algorithm>
 
@@ -25,7 +26,7 @@ static constexpr float ROW_X = 116.f;
 static constexpr float ROW_W = 306.f;
 static constexpr float ROW_H = 26.f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
-static constexpr ccColor3B ACCENT_COLOR = {0, 110, 60};
+static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
 
 static void
 moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
@@ -141,6 +142,9 @@ ToastyMenu::~ToastyMenu() {
 bool ToastyMenu::init() {
     if (!Popup::init(POPUP_W, POPUP_H))
         return false;
+
+    m_accentColor =
+        Mod::get()->getSavedValue<ccColor3B>("accent-color", DEFAULT_ACCENT_COLOR);
 
     // top right x
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
@@ -271,34 +275,21 @@ bool ToastyMenu::init() {
         auto accentRow = this->makeRow("Accent Color", ROW_H, 95.f);
         accentRow.node->setID("accent-color");
 
-        if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
-            leftSpr->setScale(.45f);
-            auto leftBtn = CCMenuItemSpriteExtra::create(
-                leftSpr, this, menu_selector(ToastyMenu::onAccentPrev));
-            leftBtn->setID("prev");
-            leftBtn->setPosition({236.f, ROW_H / 2.f});
-            accentRow.menu->addChild(leftBtn);
-        }
-
-        auto swatch = makeBG({15.f, 15.f}, ACCENT_COLOR, 255, true);
-        swatch->setPosition({262.f, ROW_H / 2.f});
-        accentRow.node->addChild(swatch);
-
-        if (auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
-            rightSpr->setScale(.45f);
-            rightSpr->setFlipX(true);
-            auto rightBtn = CCMenuItemSpriteExtra::create(
-                rightSpr, this, menu_selector(ToastyMenu::onAccentNext));
-            rightBtn->setID("next");
-            rightBtn->setPosition({288.f, ROW_H / 2.f});
-            accentRow.menu->addChild(rightBtn);
-        }
+        m_accentSwatch = makeBG({42.f, 18.f}, m_accentColor, 255, true);
+        auto accentButton = CCMenuItemSpriteExtra::create(
+            m_accentSwatch, this, menu_selector(ToastyMenu::onAccentColor));
+        accentButton->setID("picker");
+        accentButton->setPosition({267.f, ROW_H / 2.f});
+        accentRow.menu->addChild(accentButton);
         scroll->m_contentLayer->addChild(accentRow.node);
 
         scroll->m_contentLayer->addChild(
-            this->makeToggleRow("show-notifications", "Show Notifications", true));
+            this->makeToggleRow(
+                "show-notifications",
+                "Show Notifications",
+                Mod::get()->getSavedValue<bool>("show-notifications", true)));
         scroll->m_contentLayer->addChild(
-            this->makeToggleRow("remember-settings", "Remember Settings", true));
+            this->makeToggleRow("remember-settings", "Remember Settings", true, false));
         scroll->m_contentLayer->addChild(
             this->makeToggleRow("auto-save-macros",
                                 "Auto Save Macros",
@@ -506,7 +497,8 @@ ScrollLayer* ToastyMenu::addScroll(CCNode* page, int tab, CCPoint pos, CCSize si
     return scroll;
 }
 
-ToastyMenu::Group ToastyMenu::makeRow(ZStringView title, float height, float titleWidth) {
+ToastyMenu::Group
+ToastyMenu::makeRow(ZStringView title, float height, float titleWidth, bool enabled) {
     Group row;
     row.node = CCNode::create();
     row.node->setContentSize({ROW_W, height});
@@ -519,6 +511,9 @@ ToastyMenu::Group ToastyMenu::makeRow(ZStringView title, float height, float tit
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({10.f, height / 2.f});
     label->limitLabelWidth(titleWidth, .45f, .1f);
+    if (!enabled) {
+        label->setColor({145, 145, 145});
+    }
     row.node->addChild(label);
 
     row.menu = CCMenu::create();
@@ -528,8 +523,8 @@ ToastyMenu::Group ToastyMenu::makeRow(ZStringView title, float height, float tit
     return row;
 }
 
-CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on) {
-    auto row = this->makeRow(title, ROW_H, 200.f);
+CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on, bool enabled) {
+    auto row = this->makeRow(title, ROW_H, 200.f, enabled);
     row.node->setID(id);
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
@@ -537,6 +532,10 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on) {
     toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
     toggle->toggle(on);
     toggle->setID(fmt::format("{}-toggle", id));
+    toggle->setEnabled(enabled);
+    if (!enabled) {
+        toggle->setOpacity(130);
+    }
     row.menu->addChild(toggle);
     return row.node;
 }
@@ -885,7 +884,7 @@ void ToastyMenu::updateModes() {
 void ToastyMenu::updateTabs() {
     for (int i = 0; i < TabCount; i++) {
         if (i == m_tab) {
-            m_tabBgs[i]->setColor(ACCENT_COLOR);
+            m_tabBgs[i]->setColor(m_accentColor);
             m_tabBgs[i]->setOpacity(200);
         } else {
             m_tabBgs[i]->setColor({0, 0, 0});
@@ -933,7 +932,7 @@ void ToastyMenu::refreshMacroList() {
     content->updateLayout();
     m_macroScroll->scrollToTop();
     for (auto [index, bg] : asp::iter::enumerate(m_macroRowBgs)) {
-        bg->setColor(static_cast<int>(index) == m_selectedMacro ? ACCENT_COLOR
+        bg->setColor(static_cast<int>(index) == m_selectedMacro ? m_accentColor
                                                                : ccColor3B{0, 0, 0});
     }
 }
@@ -1049,13 +1048,33 @@ void ToastyMenu::onSelectMacro(CCObject* sender) {
     toasty::engine::setSelectedReplay(std::move(name));
     m_selectedMacro = index;
     for (auto [i, bg] : asp::iter::enumerate(m_macroRowBgs)) {
-        bg->setColor(i == index ? ACCENT_COLOR : ccColor3B{0, 0, 0});
+        bg->setColor(i == index ? m_accentColor : ccColor3B{0, 0, 0});
     }
 }
 
-void ToastyMenu::onAccentPrev(CCObject* sender) {}
+void ToastyMenu::onAccentColor(CCObject*) {
+    if (auto popup = ColorPickPopup::create(m_accentColor)) {
+        WeakRef<ToastyMenu> weak(this);
+        popup->setCallback([weak](ccColor4B const& color) {
+            if (auto menu = weak.lock()) {
+                menu->setAccentColor(to3B(color));
+            }
+        });
+        popup->show();
+    }
+}
 
-void ToastyMenu::onAccentNext(CCObject* sender) {}
+void ToastyMenu::setAccentColor(ccColor3B color) {
+    m_accentColor = color;
+    Mod::get()->setSavedValue<ccColor3B>("accent-color", color);
+    if (m_accentSwatch) {
+        m_accentSwatch->setColor(color);
+    }
+    this->updateTabs();
+    for (auto [index, bg] : asp::iter::enumerate(m_macroRowBgs)) {
+        bg->setColor(static_cast<int>(index) == m_selectedMacro ? color : ccColor3B{0, 0, 0});
+    }
+}
 
 void ToastyMenu::onScaleSlider(CCObject* sender) {
     float scale = .7f + m_scaleSlider->getValue() * .4f;
@@ -1205,7 +1224,7 @@ bool RenameMacroPopup::init(ToastyMenu* menu, std::string fileName) {
 
 void RenameMacroPopup::onOpenFolder(CCObject*) {
     if (!geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory())) {
-        Notification::create("Unable to open replay folder", NotificationIcon::Error)->show();
+        toasty::notifications::show("Unable to open replay folder", NotificationIcon::Error);
     }
 }
 

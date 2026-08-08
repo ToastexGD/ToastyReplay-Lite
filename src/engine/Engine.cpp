@@ -3,10 +3,10 @@
 #include "../replay/TtrlFingerprint.hpp"
 #include "../replay/TtrlStorage.hpp"
 #include "../timing/TpsBypass.hpp"
+#include "../ui/Notifications.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
-#include <Geode/ui/Notification.hpp>
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -133,7 +133,7 @@ namespace toasty::engine {
         session->recordingRate = toasty::tps::effectiveRate();
         session->mode = Mode::Record;
         resetAttempt(*session);
-        Notification::create("Recording started", NotificationIcon::Info)->show();
+        toasty::notifications::show("Recording started", NotificationIcon::Info);
         return true;
     }
 
@@ -154,13 +154,13 @@ namespace toasty::engine {
         if (result.isErr()) {
             auto message = replay::ttrl::describe(result.unwrapErr());
             log::error("Failed to save replay: {}", message);
-            Notification::create("Failed to save replay", NotificationIcon::Error)->show();
+            toasty::notifications::show("Failed to save replay", NotificationIcon::Error);
             return false;
         }
         auto name = result.unwrap();
         setSelectedReplay(name);
         log::info("Saved replay {}", name);
-        Notification::create(fmt::format("Saved {}", name), NotificationIcon::Success)->show();
+        toasty::notifications::show(fmt::format("Saved {}", name), NotificationIcon::Success);
         return true;
     }
 
@@ -216,7 +216,7 @@ namespace toasty::engine {
         resetAttempt(*session);
         setSelectedReplay(std::move(name));
         log::info("Loaded replay {} with {} inputs", selectedReplay(), session->playback->inputs.size());
-        Notification::create("Replay started", NotificationIcon::Info)->show();
+        toasty::notifications::show("Replay started", NotificationIcon::Info);
         return true;
     }
 
@@ -231,7 +231,7 @@ namespace toasty::engine {
     void togglePlayback() {
         if (playing()) {
             stopPlayback();
-            Notification::create("Replay stopped", NotificationIcon::Info)->show();
+            toasty::notifications::show("Replay stopped", NotificationIcon::Info);
             return;
         }
         auto selected = selectedReplay();

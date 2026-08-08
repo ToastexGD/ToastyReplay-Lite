@@ -34,6 +34,8 @@ class ToastyMenu : public geode::Popup {
     CCMenuItemToggler* m_speedToggle = nullptr;
     TextInput* m_tpsInput = nullptr;
     CCMenuItemToggler* m_tpsToggle = nullptr;
+    ccColor3B m_accentColor = {0, 110, 60};
+    NineSlice* m_accentSwatch = nullptr;
     Slider* m_scaleSlider = nullptr;
     CCLabelBMFont* m_scalePct = nullptr;
     bool m_dragging = false;
@@ -48,8 +50,8 @@ class ToastyMenu : public geode::Popup {
     NineSlice* addPanel(CCNode* page, CCPoint center, CCSize size);
     ScrollLayer* addScroll(CCNode* page, int tab, CCPoint pos, CCSize size);
 
-    Group makeRow(ZStringView title, float height, float titleWidth);
-    CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on);
+    Group makeRow(ZStringView title, float height, float titleWidth, bool enabled = true);
+    CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on, bool enabled = true);
     CCNode* makeSpeedhackRow();
     CCNode* makeTpsRow();
     CCNode* makeSectionRow(ZStringView title);
@@ -74,8 +76,8 @@ class ToastyMenu : public geode::Popup {
     void onReplayMacro(CCObject* sender);
     void onRenameMacro(CCObject* sender);
     void onDeleteMacro(CCObject* sender);
-    void onAccentPrev(CCObject* sender);
-    void onAccentNext(CCObject* sender);
+    void onAccentColor(CCObject* sender);
+    void setAccentColor(ccColor3B color);
     void onSeedInfo(CCObject* sender);
     void onScaleSlider(CCObject* sender);
     void onBindKey(CCObject* sender);

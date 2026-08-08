@@ -2,13 +2,13 @@
 
 #include "../replay/TtrlCodec.hpp"
 #include "../timing/TpsBypass.hpp"
+#include "../ui/Notifications.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CheckpointObject.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-#include <Geode/ui/Notification.hpp>
 
 #include <algorithm>
 #include <array>
@@ -126,7 +126,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             session->tick++;
             if (session->tick >= replay.tickCount) {
                 toasty::engine::stopPlayback();
-                Notification::create("Replay finished", NotificationIcon::Success)->show();
+                toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
         } else if (session->mode == Mode::Record) {
             if (s_frameFixes) {
@@ -290,7 +290,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         auto fields = m_fields.self();
         if (fields->session.mode == Mode::Play && player && player->m_isDead) {
             toasty::engine::stopPlayback();
-            Notification::create("Replay stopped after death", NotificationIcon::Warning)->show();
+            toasty::notifications::show("Replay stopped after death", NotificationIcon::Warning);
         }
     }
 
@@ -308,7 +308,8 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         auto previousTestMode = fields->session.previousTestMode;
         auto changedTestMode = fields->session.changedTestMode;
         if (fields->session.mode == Mode::Record) {
-            toasty::engine::stopRecording(true);
+            toasty::engine::stopRecording(
+                Mod::get()->getSavedValue<bool>("auto-save-macros", true));
         } else if (wasPlaying) {
             toasty::engine::stopPlayback();
             if (changedTestMode) {
