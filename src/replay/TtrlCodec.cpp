@@ -24,7 +24,8 @@ namespace toasty::replay::ttrl::codec {
     constexpr uint8_t FrameFixFlag = 1;
     constexpr uint8_t InputChannelsFlag = 2;
     constexpr uint8_t PlatformerFlag = 4;
-    constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag | PlatformerFlag;
+    constexpr uint8_t SeedFlag = 8;
+    constexpr uint8_t KnownFlags = FrameFixFlag | InputChannelsFlag | PlatformerFlag | SeedFlag;
     constexpr uint8_t LegacyFrameFixSchema = 1;
     constexpr uint8_t FrameFixSchema = 2;
     constexpr size_t MinimumFileSize = 25;
@@ -340,6 +341,8 @@ namespace toasty::replay::ttrl::codec {
             flags |= InputChannelsFlag;
         if (replay.mode == PlayMode::Platformer)
             flags |= PlatformerFlag;
+        if (replay.seed)
+            flags |= SeedFlag;
         bytes.push_back(flags);
         appendVarint(bytes, tps.numerator);
         appendVarint(bytes, tps.denominator);
@@ -348,6 +351,8 @@ namespace toasty::replay::ttrl::codec {
         appendVarint(bytes, replay.levelRevision);
         append64(bytes, replay.levelFingerprint);
         appendVarint(bytes, replay.tickCount);
+        if (replay.seed)
+            appendVarint(bytes, *replay.seed);
         appendVarint(bytes, inputBytes.size());
         bytes.insert(bytes.end(), inputBytes.begin(), inputBytes.end());
 
@@ -431,6 +436,11 @@ namespace toasty::replay::ttrl::codec {
 
         GEODE_UNWRAP_INTO(auto tickCount, reader.readVarint());
         replay.tickCount = tickCount;
+
+        if ((flags & SeedFlag) != 0) {
+            GEODE_UNWRAP_INTO(auto seed, reader.readVarint());
+            replay.seed = seed;
+        }
 
         GEODE_UNWRAP_INTO(auto inputSize, reader.readVarint());
         if (inputSize > MaximumInputSize) {

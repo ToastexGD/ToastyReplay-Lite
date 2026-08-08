@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "RandomSeed.hpp"
 
 #include "../replay/TtrlFingerprint.hpp"
 #include "../replay/TtrlStorage.hpp"
@@ -128,8 +129,15 @@ namespace toasty::engine {
             restorePlayback(*session, layer);
         }
         session->mode = Mode::Off;
-        layer->resetLevelFromStart();
         session->recording = {};
+        if (toasty::seed::enabled()) {
+            session->recording.seed = toasty::seed::value();
+            toasty::seed::apply(layer, *session->recording.seed);
+        }
+        layer->resetLevelFromStart();
+        if (session->recording.seed) {
+            toasty::seed::apply(layer, *session->recording.seed);
+        }
         session->recordingRate = toasty::tps::effectiveRate();
         session->mode = Mode::Record;
         resetAttempt(*session);
@@ -211,7 +219,13 @@ namespace toasty::engine {
         layer->m_isTestMode = true;
         session->playback = std::move(replay);
         session->mode = Mode::Off;
+        if (session->playback->seed) {
+            toasty::seed::apply(layer, *session->playback->seed);
+        }
         layer->resetLevel();
+        if (session->playback->seed) {
+            toasty::seed::apply(layer, *session->playback->seed);
+        }
         session->mode = Mode::Play;
         resetAttempt(*session);
         setSelectedReplay(std::move(name));

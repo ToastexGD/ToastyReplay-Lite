@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "RandomSeed.hpp"
 
 #include "../replay/TtrlCodec.hpp"
 #include "../timing/TpsBypass.hpp"
@@ -6,6 +7,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CheckpointObject.hpp>
+#include <Geode/binding/GameToolbox.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -62,6 +64,14 @@ namespace {
                                                 .y = player->getPositionY(),
                                                 .rotation = player->getRotation(),
                                                 .verticalVelocity = player->m_yVelocity});
+    }
+
+    void applySessionSeed(Session const& session, GJBaseGameLayer* layer) {
+        if (session.mode == Mode::Record && session.recording.seed) {
+            toasty::seed::apply(layer, *session.recording.seed);
+        } else if (session.mode == Mode::Play && session.playback && session.playback->seed) {
+            toasty::seed::apply(layer, *session.playback->seed);
+        }
     }
 } // namespace
 
@@ -144,6 +154,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 class $modify(ToastyReplayPlayLayer, PlayLayer) {
     struct PracticeCheckpoint {
         uint64_t tick = 0;
+        uint64_t rngState = 0;
         std::array<bool, 6> heldInputs = {};
     };
 
@@ -182,6 +193,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         fields->session.resetting = wasResetting;
         fields->resettingLevel = false;
         if (!fields->loadedCheckpoint) {
+            applySessionSeed(fields->session, this);
             rewind(fields->session);
         }
     }
@@ -193,6 +205,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         fields->checkpoints.clear();
         PlayLayer::resetLevelFromStart();
         fields->session.resetting = wasResetting;
+        applySessionSeed(fields->session, this);
         rewind(fields->session);
     }
 
@@ -202,6 +215,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         if (checkpoint && fields->session.mode == Mode::Record) {
             fields->checkpoints[checkpoint] = {
                 .tick = fields->session.tick,
+                .rngState = GameToolbox::getfast_srand(),
                 .heldInputs = fields->session.heldInputs,
             };
         }
@@ -243,6 +257,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         auto wasResetting = fields->session.resetting;
         fields->session.resetting = true;
         PlayLayer::loadFromCheckpoint(checkpoint);
+        GameToolbox::fast_srand(saved.rngState);
 
         for (size_t index = 0; index < liveInputs.size(); ++index) {
             if (saved.heldInputs[index] == liveInputs[index]) {

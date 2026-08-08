@@ -3,6 +3,7 @@
 #include <fmt/ranges.h>
 #include <Geode/ui/ColorPickPopup.hpp>
 #include "engine/Engine.hpp"
+#include "engine/RandomSeed.hpp"
 #include "replay/TtrlStorage.hpp"
 #include "timing/Speedhack.hpp"
 #include "timing/TpsBypass.hpp"
@@ -189,6 +190,7 @@ bool ToastyMenu::init() {
         auto scroll = this->addScroll(page, TabMain, {ROW_X, 26.f}, {ROW_W, 156.f});
 
         scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
+        scroll->m_contentLayer->addChild(this->makeSeedRow());
         scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
 
@@ -503,6 +505,42 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on, bo
         toggle->setOpacity(130);
     }
     row.menu->addChild(toggle);
+    return row.node;
+}
+
+CCNode* ToastyMenu::makeSeedRow() {
+    auto row = this->makeRow("Set Seed", 32.f, 100.f);
+    row.node->setID("set-seed");
+
+    if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
+        infoSpr->setScale(.5f);
+        auto info =
+            CCMenuItemSpriteExtra::create(infoSpr, this, menu_selector(ToastyMenu::onSeedInfo));
+        info->setPosition({111.f, 16.f});
+        row.menu->addChild(info);
+    }
+
+    m_seedInput = TextInput::create(118.f, "Seed");
+    m_seedInput->setCommonFilter(CommonFilter::Uint);
+    m_seedInput->setMaxCharCount(20);
+    m_seedInput->setScale(.55f);
+    m_seedInput->setPosition({194.f, 16.f});
+    m_seedInput->setString(fmt::format("{}", toasty::seed::value()));
+    m_seedInput->setCallback([](std::string const& value) {
+        auto result = utils::numFromString<uint64_t>(value);
+        if (result) {
+            toasty::seed::setValue(result.unwrapOr(1));
+        }
+    });
+    row.node->addChild(m_seedInput);
+
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onToggleOption), .6f);
+    toggle->setPosition({ROW_W - 18.f, 16.f});
+    toggle->toggle(toasty::seed::enabled());
+    toggle->setID("set-seed-toggle");
+    row.menu->addChild(toggle);
+
     return row.node;
 }
 
@@ -997,6 +1035,15 @@ void ToastyMenu::onTpsInfo(CCObject* sender) {
         "Runs level physics at the selected TPS without changing game speed. Changes apply on the "
         "next physics update. Higher values use more CPU, and manual input precision still depends "
         "on your input and display rate. Keep every other physics or TPS bypass disabled.",
+        "OK")
+        ->show();
+}
+
+void ToastyMenu::onSeedInfo(CCObject*) {
+    FLAlertLayer::create(
+        "Set Seed",
+        "Uses the selected Geometry Dash random seed when recording and saves it in the replay. "
+        "Playback restores the seed stored in the replay.",
         "OK")
         ->show();
 }

@@ -54,6 +54,7 @@ namespace toasty::replay {
         uint64_t levelRevision = 0;
         uint64_t levelFingerprint = 0;
         uint64_t tickCount = 0;
+        std::optional<uint64_t> seed;
         std::vector<InputEvent> inputs;
         std::vector<FrameFix> frameFixes;
 

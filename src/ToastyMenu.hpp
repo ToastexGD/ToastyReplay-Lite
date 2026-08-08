@@ -29,6 +29,7 @@ class ToastyMenu : public geode::Popup {
     std::vector<std::string> m_macroNames;
     std::vector<NineSlice*> m_macroRowBgs;
     int m_selectedMacro = -1;
+    TextInput* m_seedInput = nullptr;
     TextInput* m_speedInput = nullptr;
     CCMenuItemToggler* m_speedToggle = nullptr;
     TextInput* m_tpsInput = nullptr;
@@ -51,6 +52,7 @@ class ToastyMenu : public geode::Popup {
 
     Group makeRow(ZStringView title, float height, float titleWidth, bool enabled = true);
     CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on, bool enabled = true);
+    CCNode* makeSeedRow();
     CCNode* makeSpeedhackRow();
     CCNode* makeTpsRow();
     CCNode* makeSectionRow(ZStringView title);
@@ -71,6 +73,7 @@ class ToastyMenu : public geode::Popup {
     void onTpsToggle(CCObject* sender);
     void onTpsAdjust(CCObject* sender);
     void onTpsInfo(CCObject* sender);
+    void onSeedInfo(CCObject* sender);
     void onRefreshMacros(CCObject* sender);
     void onReplayMacro(CCObject* sender);
     void onRenameMacro(CCObject* sender);
