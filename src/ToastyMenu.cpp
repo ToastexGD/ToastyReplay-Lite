@@ -346,8 +346,10 @@ bool ToastyMenu::init() {
         scroll->scrollToTop();
     }
 
-    static_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))
-        ->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
+    if (auto noclip =
+            typeinfo_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))) {
+        noclip->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
+    }
 
     this->updateTabs();
     this->updatePages();
@@ -694,16 +696,17 @@ CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
     menu->setContentSize(row->getContentSize());
     row->addChild(menu);
 
-    auto hitSpr = CCSprite::createWithSpriteFrameName("square02b_001.png");
-    hitSpr->setOpacity(0);
-    hitSpr->setContentSize({170.f, 28.f});
-    auto hitBtn =
-        CCMenuItemSpriteExtra::create(hitSpr, this, menu_selector(ToastyMenu::onSelectMacro));
-    hitBtn->setTag(index);
-    hitBtn->setPosition({85.f, 14.f});
-    hitBtn->setID("select");
-    setMacroName(hitBtn, fileName);
-    menu->addChild(hitBtn);
+    if (auto hitSpr = CCSprite::create("square02b_001.png")) {
+        hitSpr->setOpacity(0);
+        hitSpr->setContentSize({170.f, 28.f});
+        auto hitBtn =
+            CCMenuItemSpriteExtra::create(hitSpr, this, menu_selector(ToastyMenu::onSelectMacro));
+        hitBtn->setTag(index);
+        hitBtn->setPosition({85.f, 14.f});
+        hitBtn->setID("select");
+        setMacroName(hitBtn, fileName);
+        menu->addChild(hitBtn);
+    }
 
     auto replaySpr = ButtonSprite::create("Replay", "bigFont.fnt", "GJ_button_01.png", .8f);
     replaySpr->setScale(.4f);
@@ -828,6 +831,9 @@ void ToastyMenu::ccTouchEnded(CCTouch* touch, CCEvent* event) {
 }
 
 bool ToastyMenu::handleKey(enumKeyCodes key) {
+    if (CCIMEDispatcher::sharedDispatcher()->hasDelegate()) {
+        return false;
+    }
     if (s_captureBtn) {
         if (key == KEY_Escape) {
             s_captureBtn->setString(s_capturePrev.c_str());
@@ -1112,9 +1118,10 @@ void ToastyMenu::onBindKey(CCObject* sender) {
 }
 
 void ToastyMenu::onClose(CCObject* sender) {
-    Mod::get()->setSavedValue(
-        "noclip",
-        static_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))->isToggled());
+    if (auto noclip =
+            typeinfo_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))) {
+        Mod::get()->setSavedValue("noclip", noclip->isToggled());
+    }
 
     if (s_instance == this)
         s_instance = nullptr;
