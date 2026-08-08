@@ -78,6 +78,7 @@ class ToastyMenu : public geode::Popup {
     void onReplayMacro(CCObject* sender);
     void onRenameMacro(CCObject* sender);
     void onDeleteMacro(CCObject* sender);
+    void onOpenFolder(CCObject* sender);
     void onAccentColor(CCObject* sender);
     void setAccentColor(ccColor3B color);
     void onScaleSlider(CCObject* sender);
@@ -101,7 +102,6 @@ class RenameMacroPopup : public geode::Popup {
     TextInput* m_input = nullptr;
 
     bool init(ToastyMenu* menu, std::string fileName);
-    void onOpenFolder(CCObject* sender);
     void onSave(CCObject* sender);
 
   public:

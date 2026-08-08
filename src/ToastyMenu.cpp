@@ -28,6 +28,7 @@ static constexpr float ROW_W = 306.f;
 static constexpr float ROW_H = 26.f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
+static constexpr float ROW_CONTROL_RIGHT = 297.f;
 
 static void
 moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
@@ -46,6 +47,16 @@ static geode::NineSlice* makeBG(CCSize size, ccColor3B color, GLubyte opacity, b
     bg->setColor(color);
     bg->setOpacity(opacity);
     return bg;
+}
+
+static CCNode* makeTextRow(std::string text, float scale) {
+    auto row = CCNode::create();
+    auto area = SimpleTextArea::create(std::move(text), "chatFont.fnt", scale, ROW_W - 20.f);
+    area->setAnchorPoint({0.f, 1.f});
+    row->setContentSize({ROW_W, area->getHeight() + 10.f});
+    area->setPosition({10.f, row->getContentHeight() - 5.f});
+    row->addChild(area);
+    return row;
 }
 
 static ToastyMenu* s_instance = nullptr;
@@ -254,7 +265,8 @@ bool ToastyMenu::init() {
         auto accentButton = CCMenuItemSpriteExtra::create(
             m_accentSwatch, this, menu_selector(ToastyMenu::onAccentColor));
         accentButton->setID("picker");
-        accentButton->setPosition({267.f, ROW_H / 2.f});
+        accentButton->setPosition(
+            {ROW_CONTROL_RIGHT - accentButton->getScaledContentWidth() / 2.f, ROW_H / 2.f});
         accentRow.menu->addChild(accentButton);
         scroll->m_contentLayer->addChild(accentRow.node);
 
@@ -269,6 +281,21 @@ bool ToastyMenu::init() {
             this->makeToggleRow("auto-save-macros",
                                 "Auto Save Macros",
                                 Mod::get()->getSavedValue<bool>("auto-save-macros", true)));
+
+        auto folderRow = this->makeRow("Open Folder", ROW_H, 95.f);
+        folderRow.node->setID("open-folder");
+
+        if (auto folderSpr = CCSprite::createWithSpriteFrameName("gj_folderBtn_001.png")) {
+            folderSpr->setScale(.7f);
+            auto folderButton = CCMenuItemSpriteExtra::create(
+                folderSpr, this, menu_selector(ToastyMenu::onOpenFolder));
+            folderButton->setID("open");
+            folderButton->setPosition(
+                {ROW_CONTROL_RIGHT - folderButton->getScaledContentWidth() / 2.f, ROW_H / 2.f});
+            folderRow.menu->addChild(folderButton);
+        }
+        scroll->m_contentLayer->addChild(folderRow.node);
+
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
     }
@@ -302,17 +329,10 @@ bool ToastyMenu::init() {
 
         scroll->m_contentLayer->addChild(this->makeSectionRow(Mod::get()->getName().data()));
 
-        auto blurbRow = CCNode::create();
-        blurbRow->setContentSize({ROW_W, 40.f});
-        auto blurb = SimpleTextArea::create(
-            "Records vanilla inputs and plays them back from a native menu.",
-            "chatFont.fnt",
-            .6f,
-            ROW_W - 20.f);
-        blurb->setAnchorPoint({0.f, 1.f});
-        blurb->setPosition({10.f, 38.f});
-        blurbRow->addChild(blurb);
-        scroll->m_contentLayer->addChild(blurbRow);
+        scroll->m_contentLayer->addChild(
+            makeTextRow("ToastyReplay-Lite is a lightweight macro bot for Geometry Dash, with a "
+                        "goal of making and playing macros simple.",
+                        .6f));
 
         scroll->m_contentLayer->addChild(this->makeSectionRow("Developer"));
 
@@ -336,14 +356,11 @@ bool ToastyMenu::init() {
 
         scroll->m_contentLayer->addChild(this->makeSectionRow("Credits"));
 
-        auto creditsRow = CCNode::create();
-        creditsRow->setContentSize({ROW_W, 22.f});
-        auto credits =
-            CCLabelBMFont::create("Peony, Silicate, TCBot, ClickBot and xdBot", "chatFont.fnt");
-        credits->setPosition({ROW_W / 2.f, 11.f});
-        credits->limitLabelWidth(ROW_W - 20.f, .55f, .1f);
-        creditsRow->addChild(credits);
-        scroll->m_contentLayer->addChild(creditsRow);
+        scroll->m_contentLayer->addChild(
+            makeTextRow("HUGE THANKS to Peony, and developers of Silicate, and to Chag (owner of "
+                        "TCBot) for having amazing reference points, and understanding.\n\n"
+                        "Inspired by xdBot and zBot, go check them out!",
+                        .55f));
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -1074,6 +1091,12 @@ void ToastyMenu::onSelectMacro(CCObject* sender) {
     }
 }
 
+void ToastyMenu::onOpenFolder(CCObject*) {
+    if (!geode::utils::file::openFolder(Mod::get()->getSaveDir())) {
+        toasty::notifications::show("Unable to open mod folder", NotificationIcon::Error);
+    }
+}
+
 void ToastyMenu::onAccentColor(CCObject*) {
     if (auto popup = ColorPickPopup::create(m_accentColor)) {
         WeakRef<ToastyMenu> weak(this);
@@ -1226,25 +1249,10 @@ bool RenameMacroPopup::init(ToastyMenu* menu, std::string fileName) {
     saveSprite->setScale(.7f);
     auto saveButton =
         CCMenuItemSpriteExtra::create(saveSprite, this, menu_selector(RenameMacroPopup::onSave));
-    saveButton->setPosition({85.f, 40.f});
+    saveButton->setPosition({150.f, 40.f});
     saveButton->setID("save");
     menuNode->addChild(saveButton);
-
-    auto folderSprite =
-        ButtonSprite::create("Open Folder", "bigFont.fnt", "GJ_button_04.png", .8f);
-    folderSprite->setScale(.7f);
-    auto folderButton = CCMenuItemSpriteExtra::create(
-        folderSprite, this, menu_selector(RenameMacroPopup::onOpenFolder));
-    folderButton->setPosition({205.f, 40.f});
-    folderButton->setID("open-folder");
-    menuNode->addChild(folderButton);
     return true;
-}
-
-void RenameMacroPopup::onOpenFolder(CCObject*) {
-    if (!geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory())) {
-        toasty::notifications::show("Unable to open replay folder", NotificationIcon::Error);
-    }
 }
 
 void RenameMacroPopup::onSave(CCObject* sender) {
