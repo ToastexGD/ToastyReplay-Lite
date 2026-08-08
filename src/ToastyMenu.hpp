@@ -29,7 +29,6 @@ class ToastyMenu : public geode::Popup {
     std::vector<std::string> m_macroNames;
     std::vector<NineSlice*> m_macroRowBgs;
     int m_selectedMacro = -1;
-    TextInput* m_seedInput = nullptr;
     TextInput* m_speedInput = nullptr;
     CCMenuItemToggler* m_speedToggle = nullptr;
     TextInput* m_tpsInput = nullptr;
@@ -78,7 +77,6 @@ class ToastyMenu : public geode::Popup {
     void onDeleteMacro(CCObject* sender);
     void onAccentColor(CCObject* sender);
     void setAccentColor(ccColor3B color);
-    void onSeedInfo(CCObject* sender);
     void onScaleSlider(CCObject* sender);
     void onBindKey(CCObject* sender);
     void onClose(CCObject* sender) override;

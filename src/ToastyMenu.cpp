@@ -191,33 +191,6 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
         scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
-        scroll->m_contentLayer->addChild(
-            this->makeToggleRow("show-hitboxes", "Show Hitboxes", false));
-
-        auto seed = this->makeRow("Set Seed", ROW_H, 100.f);
-        seed.node->setID("set-seed");
-
-        m_seedInput = TextInput::create(150.f, "Enter seed...");
-        m_seedInput->setCommonFilter(CommonFilter::Uint);
-        m_seedInput->setScale(.62f);
-        m_seedInput->setPosition({180.f, ROW_H / 2.f});
-        m_seedInput->setID("input");
-        seed.node->addChild(m_seedInput);
-
-        if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
-            infoSpr->setScale(.55f);
-            auto infoBtn =
-                CCMenuItemSpriteExtra::create(infoSpr, this, menu_selector(ToastyMenu::onSeedInfo));
-            infoBtn->setPosition({244.f, ROW_H / 2.f});
-            seed.menu->addChild(infoBtn);
-        }
-
-        auto seedToggle = CCMenuItemToggler::createWithStandardSprites(
-            this, menu_selector(ToastyMenu::onToggleOption), .6f);
-        seedToggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
-        seedToggle->setID("toggle");
-        seed.menu->addChild(seedToggle);
-        scroll->m_contentLayer->addChild(seed.node);
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -294,11 +267,6 @@ bool ToastyMenu::init() {
             this->makeToggleRow("auto-save-macros",
                                 "Auto Save Macros",
                                 Mod::get()->getSavedValue<bool>("auto-save-macros", true)));
-        scroll->m_contentLayer->addChild(
-            this->makeToggleRow("check-for-updates", "Check For Updates", true));
-        scroll->m_contentLayer->addChild(
-            this->makeToggleRow("confirm-on-exit", "Confirm On Exit", false));
-
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
     }
@@ -315,8 +283,6 @@ bool ToastyMenu::init() {
             this->makeKeybindRow("Open Menu", "key-open-menu", KEY_F8));
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Record", "key-record", KEY_F1));
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Replay", "key-replay", KEY_F2));
-        scroll->m_contentLayer->addChild(
-            this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Speedhack", "key-speedhack", KEY_Shift));
 
@@ -1164,10 +1130,6 @@ void ToastyMenu::onDeleteMacro(CCObject* sender) {
             menu->refreshMacroList();
         }
     });
-}
-
-void ToastyMenu::onSeedInfo(CCObject* sender) {
-    FLAlertLayer::create("Set Seed", "placeholder", "OK")->show();
 }
 
 RenameMacroPopup* RenameMacroPopup::create(ToastyMenu* menu, std::string fileName) {
