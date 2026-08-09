@@ -305,7 +305,10 @@ bool ToastyMenu::init() {
         auto blurbRow = CCNode::create();
         blurbRow->setContentSize({ROW_W, 40.f});
         auto blurb = SimpleTextArea::create(
-            "Soo Text is just here until you guys change it :)", "chatFont.fnt", .6f, ROW_W - 20.f);
+            "Records vanilla inputs and plays them back from a native menu.",
+            "chatFont.fnt",
+            .6f,
+            ROW_W - 20.f);
         blurb->setAnchorPoint({0.f, 1.f});
         blurb->setPosition({10.f, 38.f});
         blurbRow->addChild(blurb);
@@ -335,8 +338,8 @@ bool ToastyMenu::init() {
 
         auto creditsRow = CCNode::create();
         creditsRow->setContentSize({ROW_W, 22.f});
-        auto credits = CCLabelBMFont::create("I don't really know who all the devs are currently.",
-                                             "chatFont.fnt");
+        auto credits =
+            CCLabelBMFont::create("Peony, Silicate, TCBot, ClickBot and xdBot", "chatFont.fnt");
         credits->setPosition({ROW_W / 2.f, 11.f});
         credits->limitLabelWidth(ROW_W - 20.f, .55f, .1f);
         creditsRow->addChild(credits);

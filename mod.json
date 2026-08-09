@@ -9,7 +9,13 @@
 	"id": "toastexgd.toastyreplay-lite",
 	"name": "ToastyReplay-Lite",
 	"version": "v1.0.0",
-	"developer": "Toastexgd",
+	"developers": [
+		"Toastexgd",
+		"Slideglide",
+		"Anticroom",
+		"Human0443",
+		"Lyn"
+	],
 	"description": "A lightweight version of ToastyReplay with a native Geometry Dash interface.",
 	"early-load": true,
 	"tags": [
