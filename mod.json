@@ -41,10 +41,10 @@
 		}
 	},
 	"settings": {
-		"silently-disable-cbf-cbs": {
+		"disable-input-precision": {
 			"type": "bool",
-			"name": "Silently Disable CBF/CBS",
-			"description": "Keep Click Between Frames and Click Between Steps disabled while ToastyReplay Lite is loaded.",
+			"name": "Disable CBF/CBS While Recording",
+			"description": "Turn off Click Between Frames and Click Between Steps while recording or playing a replay, then restore them afterward.",
 			"default": true
 		},
 		"frame-fixes": {

@@ -1,81 +1,70 @@
-#include <Geode/Geode.hpp>
-#include <Geode/loader/GameEvent.hpp>
-#include <Geode/loader/SettingV3.hpp>
-#include <Geode/modify/GameManager.hpp>
+#include "InputPrecision.hpp"
 
-#include <string_view>
+#include <Geode/Geode.hpp>
+#include <Geode/binding/GameManager.hpp>
+#include <Geode/binding/PlayLayer.hpp>
+#include <Geode/loader/SettingV3.hpp>
 
 using namespace geode::prelude;
 
 namespace {
     constexpr auto CbfModId = "syzzi.click_between_frames";
     constexpr auto CbfDisableSetting = "soft-toggle";
-    constexpr auto CompatibilitySetting = "silently-disable-cbf-cbs";
+    constexpr auto CompatibilitySetting = "disable-input-precision";
 
-    bool shouldDisableInputPrecision() {
-        return Mod::get()->getSettingValue<bool>(CompatibilitySetting);
-    }
+    bool s_active = false;
+    bool s_restoreSteps = false;
+    bool s_restoreFrames = false;
 
-    void disableClickBetweenSteps() {
-        if (!shouldDisableInputPrecision()) {
+    void setClickBetweenSteps(bool value) {
+        auto manager = GameManager::get();
+        if (!manager) {
             return;
         }
-        if (auto manager = GameManager::get()) {
-            manager->setGameVariable(GameVar::ClickBetweenSteps, false);
+        manager->setGameVariable(GameVar::ClickBetweenSteps, value);
+        if (auto layer = PlayLayer::get()) {
+            layer->m_clickBetweenSteps = value;
         }
     }
+} // namespace
 
-    void disableClickBetweenFrames() {
-        if (!shouldDisableInputPrecision()) {
+namespace toasty::compat {
+    void beginSession() {
+        if (s_active || !Mod::get()->getSettingValue<bool>(CompatibilitySetting)) {
             return;
         }
+        s_active = true;
+
+        auto manager = GameManager::get();
+        s_restoreSteps = manager && manager->getGameVariable(GameVar::ClickBetweenSteps);
+        if (s_restoreSteps) {
+            setClickBetweenSteps(false);
+        }
+
+        s_restoreFrames = false;
         if (auto cbf = Loader::get()->getLoadedMod(CbfModId);
             cbf && !cbf->getSettingValue<bool>(CbfDisableSetting)) {
             cbf->setSettingValue<bool>(CbfDisableSetting, true);
+            s_restoreFrames = true;
         }
     }
 
-    void enforceInputPrecisionSettings() {
-        disableClickBetweenSteps();
-        disableClickBetweenFrames();
-    }
-}
+    void endSession() {
+        if (!s_active) {
+            return;
+        }
+        s_active = false;
 
-class $modify(ToastyReplayGameManager, GameManager) {
-    void setGameVariable(char const* key, bool value) {
-        auto disable = key && shouldDisableInputPrecision() &&
-                       std::string_view(key) == GameVar::ClickBetweenSteps;
-        GameManager::setGameVariable(key, disable ? false : value);
-        if (disable) {
-            if (auto layer = PlayLayer::get()) {
-                layer->m_clickBetweenSteps = false;
+        if (s_restoreSteps) {
+            setClickBetweenSteps(true);
+            s_restoreSteps = false;
+        }
+
+        if (s_restoreFrames) {
+            if (auto cbf = Loader::get()->getLoadedMod(CbfModId)) {
+                cbf->setSettingValue<bool>(CbfDisableSetting, false);
             }
+            s_restoreFrames = false;
         }
     }
-};
-
-$on_mod(Loaded) {
-    listenForSettingChanges<bool>(CompatibilitySetting, [](bool enabled) {
-        if (enabled) {
-            enforceInputPrecisionSettings();
-        }
-    });
-}
-
-$on_game(ModsLoaded) {
-    if (auto cbf = Loader::get()->getLoadedMod(CbfModId)) {
-        listenForSettingChanges<bool>(
-            CbfDisableSetting,
-            [](bool disabled) {
-                if (!disabled) {
-                    enforceInputPrecisionSettings();
-                }
-            },
-            cbf);
-    }
-    disableClickBetweenFrames();
-}
-
-$on_game(Loaded) {
-    enforceInputPrecisionSettings();
-}
+} // namespace toasty::compat

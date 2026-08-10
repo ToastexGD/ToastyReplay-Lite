@@ -155,6 +155,8 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
     struct PracticeCheckpoint {
         uint64_t tick = 0;
         uint64_t rngState = 0;
+        size_t nextInput = 0;
+        size_t nextFix = 0;
         std::array<bool, 6> heldInputs = {};
     };
 
@@ -212,10 +214,12 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
     void storeCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::storeCheckpoint(checkpoint);
         auto fields = m_fields.self();
-        if (checkpoint && fields->session.mode == Mode::Record) {
+        if (checkpoint && fields->session.mode != Mode::Off) {
             fields->checkpoints[checkpoint] = {
                 .tick = fields->session.tick,
                 .rngState = GameToolbox::getfast_srand(),
+                .nextInput = fields->session.nextInput,
+                .nextFix = fields->session.nextFix,
                 .heldInputs = fields->session.heldInputs,
             };
         }
@@ -224,12 +228,52 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
     void loadFromCheckpoint(CheckpointObject* checkpoint) {
         auto fields = m_fields.self();
         auto found = fields->checkpoints.find(checkpoint);
-        if (fields->session.mode != Mode::Record || found == fields->checkpoints.end()) {
+        if (fields->session.mode == Mode::Off || found == fields->checkpoints.end()) {
             PlayLayer::loadFromCheckpoint(checkpoint);
             return;
         }
 
         auto saved = found->second;
+        if (fields->session.mode == Mode::Play) {
+            this->applyPlaybackCheckpoint(checkpoint, saved);
+        } else {
+            this->applyRecordCheckpoint(checkpoint, saved);
+        }
+        if (fields->resettingLevel) {
+            fields->loadedCheckpoint = true;
+        }
+    }
+
+    void applyPlaybackCheckpoint(CheckpointObject* checkpoint, PracticeCheckpoint const& saved) {
+        auto fields = m_fields.self();
+        auto liveInputs = fields->session.heldInputs;
+
+        fields->session.tick = saved.tick;
+        fields->session.nextInput = saved.nextInput;
+        fields->session.nextFix = saved.nextFix;
+
+        auto wasResetting = fields->session.resetting;
+        fields->session.resetting = true;
+        PlayLayer::loadFromCheckpoint(checkpoint);
+        GameToolbox::fast_srand(saved.rngState);
+
+        for (size_t index = 0; index < liveInputs.size(); ++index) {
+            if (saved.heldInputs[index] == liveInputs[index]) {
+                continue;
+            }
+            auto button = static_cast<InputButton>(index % 3 + 1);
+            auto player = index < 3 ? InputPlayer::Player1 : InputPlayer::Player2;
+            this->handleButton(saved.heldInputs[index],
+                               static_cast<int>(button),
+                               player == InputPlayer::Player1);
+        }
+
+        fields->session.heldInputs = saved.heldInputs;
+        fields->session.resetting = wasResetting;
+    }
+
+    void applyRecordCheckpoint(CheckpointObject* checkpoint, PracticeCheckpoint const& saved) {
+        auto fields = m_fields.self();
         auto liveInputs = fields->session.heldInputs;
         auto& inputs = fields->session.recording.inputs;
         auto inputStart = std::lower_bound(inputs.begin(),
@@ -278,9 +322,6 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
 
         fields->session.heldInputs = liveInputs;
         fields->session.resetting = wasResetting;
-        if (fields->resettingLevel) {
-            fields->loadedCheckpoint = true;
-        }
     }
 
     void removeCheckpoint(bool first) {
@@ -303,18 +344,11 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
     void destroyPlayer(PlayerObject* player, GameObject* object) {
         PlayLayer::destroyPlayer(player, object);
         auto fields = m_fields.self();
-        if (fields->session.mode == Mode::Play && player && player->m_isDead) {
+        if (fields->session.mode == Mode::Play && player && player->m_isDead &&
+            !m_isPracticeMode) {
             toasty::engine::stopPlayback();
             toasty::notifications::show("Replay stopped after death", NotificationIcon::Warning);
         }
-    }
-
-    void togglePracticeMode(bool practiceMode) {
-        auto fields = m_fields.self();
-        if (practiceMode && fields->session.mode == Mode::Play) {
-            toasty::engine::stopPlayback();
-        }
-        PlayLayer::togglePracticeMode(practiceMode);
     }
 
     void levelComplete() {

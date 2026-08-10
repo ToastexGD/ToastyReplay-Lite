@@ -1,6 +1,7 @@
 #include "Engine.hpp"
 #include "RandomSeed.hpp"
 
+#include "../compat/InputPrecision.hpp"
 #include "../replay/TtrlFingerprint.hpp"
 #include "../replay/TtrlStorage.hpp"
 #include "../timing/TpsBypass.hpp"
@@ -64,6 +65,7 @@ namespace toasty::engine {
                 toasty::tps::endReplayOverride();
                 session.tpsOverride = false;
             }
+            toasty::compat::endSession();
             if (layer && session.changedTestMode) {
                 layer->m_isTestMode = session.previousTestMode;
             }
@@ -101,6 +103,7 @@ namespace toasty::engine {
         if (tpsOverride) {
             toasty::tps::endReplayOverride();
         }
+        toasty::compat::endSession();
     }
 
     Mode mode() {
@@ -128,6 +131,7 @@ namespace toasty::engine {
         if (session->mode == Mode::Play) {
             restorePlayback(*session, layer);
         }
+        toasty::compat::beginSession();
         session->mode = Mode::Off;
         session->recording = {};
         if (toasty::seed::enabled()) {
@@ -150,6 +154,7 @@ namespace toasty::engine {
         if (!session || session->mode != Mode::Record) {
             return false;
         }
+        toasty::compat::endSession();
         if (!save) {
             session->recording = {};
             session->mode = Mode::Off;
@@ -185,10 +190,6 @@ namespace toasty::engine {
         if (session->mode == Mode::Play) {
             restorePlayback(*session, layer);
         }
-        if (layer->m_isPracticeMode) {
-            layer->togglePracticeMode(false);
-        }
-
         replay::ttrl::Storage storage(replay::ttrl::defaultReplayDirectory());
         auto loaded = storage.load(name);
         if (loaded.isErr()) {
@@ -204,7 +205,9 @@ namespace toasty::engine {
             FLAlertLayer::create("Replay Rejected", *error, "OK")->show();
             return false;
         }
-        if (!toasty::tps::beginReplayOverride(static_cast<int64_t>(replay.tps.numerator))) {
+        auto replayRate = static_cast<int64_t>(replay.tps.numerator);
+        auto needsOverride = toasty::tps::effectiveRate() != replayRate;
+        if (needsOverride && !toasty::tps::beginReplayOverride(replayRate)) {
             auto reason = toasty::tps::unavailableReason();
             if (reason.empty()) {
                 reason = "The replay TPS could not be applied";
@@ -213,9 +216,10 @@ namespace toasty::engine {
             return false;
         }
 
+        toasty::compat::beginSession();
         session->previousTestMode = layer->m_isTestMode;
         session->changedTestMode = true;
-        session->tpsOverride = true;
+        session->tpsOverride = needsOverride;
         layer->m_isTestMode = true;
         session->playback = std::move(replay);
         session->mode = Mode::Off;
