@@ -1,11 +1,14 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PauseLayer.hpp>
+#if !defined(GEODE_IS_IOS)
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
+#endif
 #include "ToastyMenu.hpp"
 
 using namespace geode::prelude;
 
-// open menu keybind
+// open menu keybind, no keyboard to hook on ios
+#if !defined(GEODE_IS_IOS)
 class $modify(ToastyKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
         if (down && !repeat && ToastyMenu::handleKey(key))
@@ -13,6 +16,7 @@ class $modify(ToastyKeys, CCKeyboardDispatcher) {
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }
 };
+#endif
 
 class $modify(ToastyPause, PauseLayer) {
     void customSetup() {
