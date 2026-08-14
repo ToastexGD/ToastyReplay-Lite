@@ -202,7 +202,7 @@ bool ToastyMenu::init() {
         this->addPanel(page, {PANEL_X, 104.f}, {PANEL_W, 164.f});
         auto scroll = this->addScroll(page, TabMain, {ROW_X, 26.f}, {ROW_W, 156.f});
 
-        scroll->m_contentLayer->addChild(this->makeToggleRow("noclip", "Noclip", false));
+        scroll->m_contentLayer->addChild(this->makeNoclipRow());
         scroll->m_contentLayer->addChild(this->makeSeedRow());
         scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
@@ -369,11 +369,6 @@ bool ToastyMenu::init() {
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
-    }
-
-    if (auto noclip =
-            typeinfo_cast<CCMenuItemToggler*>(this->getChildByIDRecursive("noclip-toggle"))) {
-        noclip->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
     }
 
     this->updateTabs();
@@ -681,6 +676,29 @@ CCNode* ToastyMenu::makeTpsRow() {
         m_tpsInput->setEnabled(false);
         m_tpsToggle->setEnabled(false);
     }
+
+    return row.node;
+}
+
+CCNode* ToastyMenu::makeNoclipRow() {
+    auto row = this->makeRow("Noclip", ROW_H, 140.f);
+    row.node->setID("noclip");
+
+    if (auto gearSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
+        gearSpr->setScale(.45f);
+        auto gear = CCMenuItemSpriteExtra::create(
+            gearSpr, this, menu_selector(ToastyMenu::onNoclipOptions));
+        gear->setID("options");
+        gear->setPosition({ROW_W - 48.f, ROW_H / 2.f});
+        row.menu->addChild(gear);
+    }
+
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onToggleOption), .6f);
+    toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
+    toggle->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
+    toggle->setID("noclip-toggle");
+    row.menu->addChild(toggle);
 
     return row.node;
 }
@@ -1093,6 +1111,13 @@ void ToastyMenu::onFrameStepperOptions(CCObject*) {
     if (auto popup = OptionsPopup::create(
             "Frame Stepper",
             {{"stepper-buttons", "On Screen Buttons", toasty::ui::stepperButtonsDefault()}})) {
+        popup->show();
+    }
+}
+
+void ToastyMenu::onNoclipOptions(CCObject*) {
+    if (auto popup = OptionsPopup::create(
+            "Noclip", {{"noclip-p1", "Player 1", true}, {"noclip-p2", "Player 2", true}})) {
         popup->show();
     }
 }

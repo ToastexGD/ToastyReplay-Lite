@@ -9,7 +9,11 @@ class $modify(PlayLayer) {
         }
 
         if (Mod::get()->getSavedValue<bool>("noclip", false)) {
-            return;
+            auto second = player && player == m_player2 && m_player2 != m_player1;
+            auto key = second ? "noclip-p2" : "noclip-p1";
+            if (Mod::get()->getSavedValue<bool>(key, true)) {
+                return;
+            }
         }
 
         PlayLayer::destroyPlayer(player, object);

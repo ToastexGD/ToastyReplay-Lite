@@ -56,6 +56,7 @@ class ToastyMenu : public geode::Popup {
     CCNode* makeSpeedhackRow();
     CCNode* makeTpsRow();
     CCNode* makeFrameStepperRow();
+    CCNode* makeNoclipRow();
     CCNode* makeSectionRow(ZStringView title);
     CCNode* makeMacroRow(std::string const& fileName, int index);
     CCNode* makeKeybindRow(ZStringView title, ZStringView saveId, enumKeyCodes def);
@@ -76,6 +77,7 @@ class ToastyMenu : public geode::Popup {
     void onTpsInfo(CCObject* sender);
     void onFrameStepperToggle(CCObject* sender);
     void onFrameStepperOptions(CCObject* sender);
+    void onNoclipOptions(CCObject* sender);
     void onSeedInfo(CCObject* sender);
     void onRefreshMacros(CCObject* sender);
     void onReplayMacro(CCObject* sender);
