@@ -75,6 +75,7 @@ class ToastyMenu : public geode::Popup {
     void onTpsAdjust(CCObject* sender);
     void onTpsInfo(CCObject* sender);
     void onFrameStepperToggle(CCObject* sender);
+    void onFrameStepperOptions(CCObject* sender);
     void onSeedInfo(CCObject* sender);
     void onRefreshMacros(CCObject* sender);
     void onReplayMacro(CCObject* sender);
@@ -95,6 +96,21 @@ class ToastyMenu : public geode::Popup {
     static ToastyMenu* create();
     static bool handleKey(enumKeyCodes key);
     void show() override;
+};
+
+class OptionsPopup : public geode::Popup {
+  public:
+    struct Option {
+        std::string id;
+        std::string title;
+        bool defaultValue = false;
+    };
+
+    static OptionsPopup* create(std::string title, std::vector<Option> options);
+
+  protected:
+    bool init(std::string title, std::vector<Option> options);
+    void onToggle(CCObject* sender);
 };
 
 class RenameMacroPopup : public geode::Popup {

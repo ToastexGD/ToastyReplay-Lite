@@ -9,6 +9,7 @@
 #include "timing/Speedhack.hpp"
 #include "timing/TpsBypass.hpp"
 #include "ui/Notifications.hpp"
+#include "ui/StepperButtons.hpp"
 
 #include <algorithm>
 
@@ -688,6 +689,15 @@ CCNode* ToastyMenu::makeFrameStepperRow() {
     auto row = this->makeRow("Frame Stepper", ROW_H, 140.f);
     row.node->setID("frame-stepper");
 
+    if (auto gearSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
+        gearSpr->setScale(.45f);
+        auto gear = CCMenuItemSpriteExtra::create(
+            gearSpr, this, menu_selector(ToastyMenu::onFrameStepperOptions));
+        gear->setID("options");
+        gear->setPosition({ROW_W - 48.f, ROW_H / 2.f});
+        row.menu->addChild(gear);
+    }
+
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onFrameStepperToggle), .6f);
     toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
@@ -1076,6 +1086,15 @@ void ToastyMenu::onTpsAdjust(CCObject* sender) {
 void ToastyMenu::onFrameStepperToggle(CCObject* sender) {
     auto toggle = static_cast<CCMenuItemToggler*>(sender);
     toasty::stepper::setEnabled(!toggle->isToggled());
+    toasty::ui::refreshStepperButtons();
+}
+
+void ToastyMenu::onFrameStepperOptions(CCObject*) {
+    if (auto popup = OptionsPopup::create(
+            "Frame Stepper",
+            {{"stepper-buttons", "On Screen Buttons", toasty::ui::stepperButtonsDefault()}})) {
+        popup->show();
+    }
 }
 
 void ToastyMenu::onTpsInfo(CCObject* sender) {
@@ -1182,6 +1201,8 @@ void ToastyMenu::onClose(CCObject* sender) {
         s_instance = nullptr;
     s_captureBtn = nullptr;
 
+    toasty::ui::refreshStepperButtons();
+
     // rehide cursor during gameplay
     if (PlayLayer::get()) {
         auto scene = CCDirector::sharedDirector()->getRunningScene();
@@ -1239,6 +1260,58 @@ void ToastyMenu::onDeleteMacro(CCObject* sender) {
             menu->refreshMacroList();
         }
     });
+}
+
+OptionsPopup* OptionsPopup::create(std::string title, std::vector<Option> options) {
+    auto popup = new OptionsPopup();
+    if (popup->init(std::move(title), std::move(options))) {
+        popup->autorelease();
+        return popup;
+    }
+    delete popup;
+    return nullptr;
+}
+
+bool OptionsPopup::init(std::string title, std::vector<Option> options) {
+    auto height = 74.f + static_cast<float>(options.size()) * 30.f;
+    if (!Popup::init(260.f, height)) {
+        return false;
+    }
+
+    this->setTitle(title);
+    moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
+
+    auto menu = CCMenu::create();
+    menu->setPosition({0.f, 0.f});
+    menu->setContentSize(m_size);
+    m_mainLayer->addChild(menu);
+
+    auto y = height - 62.f;
+    for (auto const& option : options) {
+        auto label = CCLabelBMFont::create(option.title.c_str(), "bigFont.fnt");
+        label->setAnchorPoint({0.f, .5f});
+        label->setPosition({24.f, y});
+        label->limitLabelWidth(160.f, .5f, .1f);
+        m_mainLayer->addChild(label);
+
+        auto toggle = CCMenuItemToggler::createWithStandardSprites(
+            this, menu_selector(OptionsPopup::onToggle), .6f);
+        toggle->setPosition({222.f, y});
+        toggle->toggle(Mod::get()->getSavedValue<bool>(option.id, option.defaultValue));
+        toggle->setID(option.id);
+        menu->addChild(toggle);
+
+        y -= 30.f;
+    }
+    return true;
+}
+
+void OptionsPopup::onToggle(CCObject* sender) {
+    auto toggle = static_cast<CCMenuItemToggler*>(sender);
+    auto id = toggle->getID();
+    if (!id.empty()) {
+        Mod::get()->setSavedValue<bool>(id, !toggle->isToggled());
+    }
 }
 
 RenameMacroPopup* RenameMacroPopup::create(ToastyMenu* menu, std::string fileName) {
