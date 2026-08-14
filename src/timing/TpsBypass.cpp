@@ -1,4 +1,5 @@
 #include "TpsBypass.hpp"
+#include "FrameStepper.hpp"
 #include "StepPlanner.hpp"
 #include "TpsPatch.hpp"
 
@@ -121,6 +122,21 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
 
     void update(float dt) override {
         auto fields = m_fields.self();
+
+        if (toasty::stepper::freezes()) {
+            fields->planner.reset();
+            fields->customDelta = false;
+            if (toasty::tps::patch::interceptsTicks())
+                toasty::tps::patch::setExpected(1);
+            if (!toasty::stepper::takeStep())
+                return;
+            fields->delta = 1.0 / static_cast<double>(activeRate());
+            fields->customDelta = true;
+            GJBaseGameLayer::update(static_cast<float>(fields->delta));
+            fields->customDelta = false;
+            return;
+        }
+
         auto active = customTimingActive();
         auto target = activeRate();
         auto timeWarp = std::min(static_cast<double>(m_gameState.m_timeWarp), 1.0);

@@ -5,6 +5,7 @@
 #include "engine/Engine.hpp"
 #include "engine/RandomSeed.hpp"
 #include "replay/TtrlStorage.hpp"
+#include "timing/FrameStepper.hpp"
 #include "timing/Speedhack.hpp"
 #include "timing/TpsBypass.hpp"
 #include "ui/Notifications.hpp"
@@ -204,6 +205,7 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(this->makeSeedRow());
         scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
+        scroll->m_contentLayer->addChild(this->makeFrameStepperRow());
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -314,6 +316,8 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Replay", "key-replay", KEY_F2));
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Speedhack", "key-speedhack", KEY_Shift));
+        scroll->m_contentLayer->addChild(
+            this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -680,6 +684,20 @@ CCNode* ToastyMenu::makeTpsRow() {
     return row.node;
 }
 
+CCNode* ToastyMenu::makeFrameStepperRow() {
+    auto row = this->makeRow("Frame Stepper", ROW_H, 140.f);
+    row.node->setID("frame-stepper");
+
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onFrameStepperToggle), .6f);
+    toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
+    toggle->toggle(toasty::stepper::enabled());
+    toggle->setID("frame-stepper-toggle");
+    row.menu->addChild(toggle);
+
+    return row.node;
+}
+
 CCNode* ToastyMenu::makeSectionRow(ZStringView title) {
     auto row = CCNode::create();
     row->setContentSize({ROW_W, 20.f});
@@ -889,6 +907,12 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
         return true;
     }
 
+    auto stepKey = Mod::get()->getSavedValue<int>("key-frame-step", static_cast<int>(KEY_F3));
+    if (static_cast<int>(key) == stepKey) {
+        toasty::stepper::step();
+        return true;
+    }
+
     auto speedKey = Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_Shift));
     if (static_cast<int>(key) == speedKey) {
         toasty::speedhack::setEnabled(!toasty::speedhack::enabled());
@@ -1047,6 +1071,11 @@ void ToastyMenu::onTpsAdjust(CCObject* sender) {
                                     toasty::tps::Maximum);
     toasty::tps::setRate(next);
     m_tpsInput->setString(fmt::format("{}", next));
+}
+
+void ToastyMenu::onFrameStepperToggle(CCObject* sender) {
+    auto toggle = static_cast<CCMenuItemToggler*>(sender);
+    toasty::stepper::setEnabled(!toggle->isToggled());
 }
 
 void ToastyMenu::onTpsInfo(CCObject* sender) {
