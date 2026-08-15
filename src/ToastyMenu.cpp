@@ -207,6 +207,10 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
         scroll->m_contentLayer->addChild(this->makeFrameStepperRow());
+        scroll->m_contentLayer->addChild(
+            this->makeToggleRow("safe-mode",
+                                "Safe Mode",
+                                Mod::get()->getSavedValue<bool>("safe-mode", false)));
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
