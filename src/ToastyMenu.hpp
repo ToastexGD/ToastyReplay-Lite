@@ -96,7 +96,7 @@ class ToastyMenu : public geode::Popup {
 
   public:
     static ToastyMenu* create();
-    static bool handleKey(enumKeyCodes key);
+    static bool handleKey(enumKeyCodes key, bool down, bool repeat);
     void show() override;
 };
 
@@ -106,6 +106,7 @@ class OptionsPopup : public geode::Popup {
         std::string id;
         std::string title;
         bool defaultValue = false;
+        std::string info;
     };
 
     static OptionsPopup* create(std::string title, std::vector<Option> options);
@@ -113,6 +114,7 @@ class OptionsPopup : public geode::Popup {
   protected:
     bool init(std::string title, std::vector<Option> options);
     void onToggle(CCObject* sender);
+    void onInfo(CCObject* sender);
 };
 
 class RenameMacroPopup : public geode::Popup {

@@ -3,7 +3,9 @@
 namespace toasty::stepper {
     bool enabled();
     void setEnabled(bool value);
+    bool overridesTps();
     bool freezes();
-    void step();
+    void stepOnce();
+    void setRepeating(bool repeating);
     bool takeStep();
 } // namespace toasty::stepper

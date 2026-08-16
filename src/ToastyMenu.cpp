@@ -900,10 +900,26 @@ void ToastyMenu::ccTouchEnded(CCTouch* touch, CCEvent* event) {
     FLAlertLayer::ccTouchEnded(touch, event);
 }
 
-bool ToastyMenu::handleKey(enumKeyCodes key) {
+bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     if (CCIMEDispatcher::sharedDispatcher()->hasDelegate()) {
         return false;
     }
+
+    auto stepKey = Mod::get()->getSavedValue<int>("key-frame-step", static_cast<int>(KEY_F3));
+    if (!s_captureBtn && static_cast<int>(key) == stepKey) {
+        if (down && !repeat) {
+            toasty::stepper::stepOnce();
+            toasty::stepper::setRepeating(true);
+        } else if (!down) {
+            toasty::stepper::setRepeating(false);
+        }
+        return true;
+    }
+
+    if (!down || repeat) {
+        return false;
+    }
+
     if (s_captureBtn) {
         if (key == KEY_Escape) {
             s_captureBtn->setString(s_capturePrev.c_str());
@@ -936,12 +952,6 @@ bool ToastyMenu::handleKey(enumKeyCodes key) {
     auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
     if (static_cast<int>(key) == replayKey) {
         toasty::engine::togglePlayback();
-        return true;
-    }
-
-    auto stepKey = Mod::get()->getSavedValue<int>("key-frame-step", static_cast<int>(KEY_F3));
-    if (static_cast<int>(key) == stepKey) {
-        toasty::stepper::step();
         return true;
     }
 
@@ -1114,7 +1124,11 @@ void ToastyMenu::onFrameStepperToggle(CCObject* sender) {
 void ToastyMenu::onFrameStepperOptions(CCObject*) {
     if (auto popup = OptionsPopup::create(
             "Frame Stepper",
-            {{"stepper-buttons", "On Screen Buttons", toasty::ui::stepperButtonsDefault()}})) {
+            {{"stepper-buttons", "On Screen Buttons", toasty::ui::stepperButtonsDefault(), ""},
+             {"stepper-override-tps",
+              "Override TPS Limit",
+              false,
+              "Always forces frame stepper to step on 240tps intervals, regardless of TPS."}})) {
         popup->show();
     }
 }
@@ -1320,8 +1334,19 @@ bool OptionsPopup::init(std::string title, std::vector<Option> options) {
         auto label = CCLabelBMFont::create(option.title.c_str(), "bigFont.fnt");
         label->setAnchorPoint({0.f, .5f});
         label->setPosition({24.f, y});
-        label->limitLabelWidth(160.f, .5f, .1f);
+        label->limitLabelWidth(150.f, .5f, .1f);
         m_mainLayer->addChild(label);
+
+        if (!option.info.empty()) {
+            if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
+                infoSpr->setScale(.45f);
+                auto info = CCMenuItemSpriteExtra::create(
+                    infoSpr, this, menu_selector(OptionsPopup::onInfo));
+                info->setPosition({190.f, y});
+                info->setUserObject(CCString::create(option.info));
+                menu->addChild(info);
+            }
+        }
 
         auto toggle = CCMenuItemToggler::createWithStandardSprites(
             this, menu_selector(OptionsPopup::onToggle), .6f);
@@ -1333,6 +1358,16 @@ bool OptionsPopup::init(std::string title, std::vector<Option> options) {
         y -= 30.f;
     }
     return true;
+}
+
+void OptionsPopup::onInfo(CCObject* sender) {
+    auto node = typeinfo_cast<CCNode*>(sender);
+    auto text = node ? typeinfo_cast<CCString*>(node->getUserObject()) : nullptr;
+    if (!text) {
+        return;
+    }
+    auto title = m_title ? m_title->getString() : "Info";
+    FLAlertLayer::create(title, text->getCString(), "OK")->show();
 }
 
 void OptionsPopup::onToggle(CCObject* sender) {

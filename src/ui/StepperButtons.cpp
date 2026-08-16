@@ -25,13 +25,18 @@ namespace toasty::ui {
         if (!layer) {
             return;
         }
-        if (auto menu = layer->getChildByID("frame-stepper-menu"_spr)) {
+        auto menu = layer->getChildByIDRecursive("frame-stepper-menu"_spr);
+        if (menu) {
             menu->setVisible(toasty::stepper::enabled() && stepperButtonsVisible());
         }
     }
 } // namespace toasty::ui
 
 class $modify(StepperPlayLayer, PlayLayer) {
+    struct Fields {
+        Ref<CCMenuItemSpriteExtra> stepButton;
+    };
+
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
             return false;
@@ -51,13 +56,25 @@ class $modify(StepperPlayLayer, PlayLayer) {
         stepButton->setID("step"_spr);
         stepButton->setPosition({winSize.width - 44.f, 34.f});
         menu->addChild(stepButton);
+        m_fields->stepButton = stepButton;
 
-        this->addChild(menu, 100);
+        CCNode* host = m_uiLayer ? static_cast<CCNode*>(m_uiLayer) : static_cast<CCNode*>(this);
+        host->addChild(menu, 100);
+        handleTouchPriority(menu);
+
         toasty::ui::refreshStepperButtons();
+        this->schedule(schedule_selector(StepperPlayLayer::pollStepButton));
         return true;
     }
 
+    void pollStepButton(float dt) {
+        auto button = m_fields->stepButton;
+        auto parent = button ? button->getParent() : nullptr;
+        toasty::stepper::setRepeating(button && parent && parent->isVisible() &&
+                                      button->isSelected());
+    }
+
     void onStep(CCObject* sender) {
-        toasty::stepper::step();
+        toasty::stepper::stepOnce();
     }
 };

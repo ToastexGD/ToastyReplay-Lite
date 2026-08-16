@@ -11,7 +11,7 @@ using namespace geode::prelude;
 #if !defined(GEODE_IS_IOS)
 class $modify(ToastyKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
-        if (down && !repeat && ToastyMenu::handleKey(key))
+        if (ToastyMenu::handleKey(key, down, repeat))
             return true;
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }

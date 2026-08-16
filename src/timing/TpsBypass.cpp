@@ -130,7 +130,8 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
                 toasty::tps::patch::setExpected(1);
             if (!toasty::stepper::takeStep())
                 return;
-            fields->delta = 1.0 / static_cast<double>(activeRate());
+            auto stepRate = toasty::stepper::overridesTps() ? toasty::tps::Vanilla : activeRate();
+            fields->delta = 1.0 / static_cast<double>(stepRate);
             fields->customDelta = true;
             GJBaseGameLayer::update(static_cast<float>(fields->delta));
             fields->customDelta = false;
