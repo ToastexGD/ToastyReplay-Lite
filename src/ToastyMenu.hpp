@@ -72,6 +72,8 @@ class ToastyMenu : public geode::Popup {
     void onToggleOption(CCObject* sender);
     void onSpeedhackToggle(CCObject* sender);
     void onSpeedhackAdjust(CCObject* sender);
+    void onSpeedhackOptions(CCObject* sender);
+    void onSeedAdjust(CCObject* sender);
     void onTpsToggle(CCObject* sender);
     void onTpsAdjust(CCObject* sender);
     void onTpsInfo(CCObject* sender);
@@ -96,6 +98,7 @@ class ToastyMenu : public geode::Popup {
 
   public:
     static ToastyMenu* create();
+    static bool isOpen();
     static bool handleKey(enumKeyCodes key, bool down, bool repeat);
     void show() override;
 };

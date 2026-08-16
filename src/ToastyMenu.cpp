@@ -10,6 +10,7 @@
 #include "timing/TpsBypass.hpp"
 #include "ui/Notifications.hpp"
 #include "ui/StepperButtons.hpp"
+#include "ui/Watermark.hpp"
 
 #include <algorithm>
 
@@ -146,6 +147,10 @@ ToastyMenu* ToastyMenu::create() {
     return nullptr;
 }
 
+bool ToastyMenu::isOpen() {
+    return s_instance != nullptr;
+}
+
 ToastyMenu::~ToastyMenu() {
     if (s_instance == this) {
         s_instance = nullptr;
@@ -203,10 +208,10 @@ bool ToastyMenu::init() {
         auto scroll = this->addScroll(page, TabMain, {ROW_X, 26.f}, {ROW_W, 156.f});
 
         scroll->m_contentLayer->addChild(this->makeNoclipRow());
-        scroll->m_contentLayer->addChild(this->makeSeedRow());
-        scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
+        scroll->m_contentLayer->addChild(this->makeSpeedhackRow());
         scroll->m_contentLayer->addChild(this->makeFrameStepperRow());
+        scroll->m_contentLayer->addChild(this->makeSeedRow());
         scroll->m_contentLayer->addChild(
             this->makeToggleRow("safe-mode",
                                 "Safe Mode",
@@ -283,8 +288,6 @@ bool ToastyMenu::init() {
                 "Show Notifications",
                 Mod::get()->getSavedValue<bool>("show-notifications", true)));
         scroll->m_contentLayer->addChild(
-            this->makeToggleRow("remember-settings", "Remember Settings", true, false));
-        scroll->m_contentLayer->addChild(
             this->makeToggleRow("auto-save-macros",
                                 "Auto Save Macros",
                                 Mod::get()->getSavedValue<bool>("auto-save-macros", true)));
@@ -323,6 +326,8 @@ bool ToastyMenu::init() {
             this->makeKeybindRow("Speedhack", "key-speedhack", KEY_Shift));
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
+        scroll->m_contentLayer->addChild(
+            this->makeKeybindRow("Toggle Stepper", "key-frame-stepper", KEY_F4));
 
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
@@ -535,7 +540,7 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on, bo
 }
 
 CCNode* ToastyMenu::makeSeedRow() {
-    auto row = this->makeRow("Set Seed", 32.f, 100.f);
+    auto row = this->makeRow("Seed", 32.f, 100.f);
     row.node->setID("set-seed");
 
     if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
@@ -544,6 +549,15 @@ CCNode* ToastyMenu::makeSeedRow() {
             CCMenuItemSpriteExtra::create(infoSpr, this, menu_selector(ToastyMenu::onSeedInfo));
         info->setPosition({111.f, 16.f});
         row.menu->addChild(info);
+    }
+
+    if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        leftSpr->setScale(.38f);
+        auto left =
+            CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(ToastyMenu::onSeedAdjust));
+        left->setTag(-1);
+        left->setPosition({137.f, 16.f});
+        row.menu->addChild(left);
     }
 
     m_seedInput = TextInput::create(118.f, "Seed");
@@ -560,6 +574,16 @@ CCNode* ToastyMenu::makeSeedRow() {
     });
     row.node->addChild(m_seedInput);
 
+    if (auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
+        rightSpr->setScale(.38f);
+        rightSpr->setFlipX(true);
+        auto right =
+            CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(ToastyMenu::onSeedAdjust));
+        right->setTag(1);
+        right->setPosition({250.f, 16.f});
+        row.menu->addChild(right);
+    }
+
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
     toggle->setPosition({ROW_W - 18.f, 16.f});
@@ -573,6 +597,15 @@ CCNode* ToastyMenu::makeSeedRow() {
 CCNode* ToastyMenu::makeSpeedhackRow() {
     auto row = this->makeRow("Speedhack", 32.f, 100.f);
     row.node->setID("speedhack");
+
+    if (auto gearSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
+        gearSpr->setScale(.45f);
+        auto gear = CCMenuItemSpriteExtra::create(
+            gearSpr, this, menu_selector(ToastyMenu::onSpeedhackOptions));
+        gear->setID("options");
+        gear->setPosition({111.f, 16.f});
+        row.menu->addChild(gear);
+    }
 
     if (auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png")) {
         leftSpr->setScale(.38f);
@@ -851,6 +884,8 @@ void ToastyMenu::show() {
 
     this->updateModes();
 
+    toasty::ui::refreshWatermark();
+
     // gd hides the cursor in levels
     PlatformToolbox::showCursor();
 }
@@ -909,9 +944,9 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     if (!s_captureBtn && static_cast<int>(key) == stepKey) {
         if (down && !repeat) {
             toasty::stepper::stepOnce();
-            toasty::stepper::setRepeating(true);
+            toasty::stepper::setKeyHeld(true);
         } else if (!down) {
-            toasty::stepper::setRepeating(false);
+            toasty::stepper::setKeyHeld(false);
         }
         return true;
     }
@@ -952,6 +987,14 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
     if (static_cast<int>(key) == replayKey) {
         toasty::engine::togglePlayback();
+        return true;
+    }
+
+    auto stepperKey =
+        Mod::get()->getSavedValue<int>("key-frame-stepper", static_cast<int>(KEY_F4));
+    if (static_cast<int>(key) == stepperKey) {
+        toasty::stepper::setEnabled(!toasty::stepper::enabled());
+        toasty::ui::refreshStepperButtons();
         return true;
     }
 
@@ -1087,6 +1130,25 @@ void ToastyMenu::onSpeedhackToggle(CCObject* sender) {
     toasty::speedhack::setEnabled(!toggle->isToggled());
 }
 
+void ToastyMenu::onSeedAdjust(CCObject* sender) {
+    auto direction = static_cast<CCNode*>(sender)->getTag();
+    auto current = toasty::seed::value();
+    auto next = direction < 0 ? (current > 0 ? current - 1 : 0) : current + 1;
+    toasty::seed::setValue(next);
+    m_seedInput->setString(fmt::format("{}", next));
+}
+
+void ToastyMenu::onSpeedhackOptions(CCObject*) {
+    if (auto popup = OptionsPopup::create(
+            "Speedhack",
+            {{"speedhack-audio",
+              "Speedhack Audio",
+              false,
+              "Speeds up or slows down the level music to match the speedhack rate."}})) {
+        popup->show();
+    }
+}
+
 void ToastyMenu::onSpeedhackAdjust(CCObject* sender) {
     auto direction = static_cast<CCNode*>(sender)->getTag();
     auto next = std::clamp(toasty::speedhack::rate() + static_cast<double>(direction) * .1,
@@ -1158,7 +1220,7 @@ void ToastyMenu::onTpsInfo(CCObject* sender) {
 
 void ToastyMenu::onSeedInfo(CCObject*) {
     FLAlertLayer::create(
-        "Set Seed",
+        "Seed",
         "Uses the selected Geometry Dash random seed when recording and saves it in the replay. "
         "Playback restores the seed stored in the replay.",
         "OK")
@@ -1245,6 +1307,8 @@ void ToastyMenu::onClose(CCObject* sender) {
     s_captureBtn = nullptr;
 
     toasty::ui::refreshStepperButtons();
+    toasty::ui::refreshWatermark();
+    toasty::speedhack::syncAudio();
 
     // rehide cursor during gameplay
     if (PlayLayer::get()) {

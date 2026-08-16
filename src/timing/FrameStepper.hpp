@@ -5,7 +5,9 @@ namespace toasty::stepper {
     void setEnabled(bool value);
     bool overridesTps();
     bool freezes();
+    void syncMusic();
     void stepOnce();
-    void setRepeating(bool repeating);
+    void setKeyHeld(bool held);
+    void setButtonHeld(bool held);
     bool takeStep();
 } // namespace toasty::stepper

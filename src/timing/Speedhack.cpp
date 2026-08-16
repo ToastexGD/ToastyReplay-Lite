@@ -1,7 +1,9 @@
 #include "Speedhack.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/loader/GameEvent.hpp>
+#include <Geode/modify/PlayLayer.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +32,7 @@ namespace {
                     static_cast<float>(s_enabled ? s_rate : toasty::speedhack::Default));
             }
         }
+        toasty::speedhack::syncAudio();
     }
 }
 
@@ -50,6 +53,16 @@ namespace toasty::speedhack {
         applySpeed();
     }
 
+    void syncAudio() {
+        auto engine = FMODAudioEngine::sharedEngine();
+        if (!engine || !engine->m_backgroundMusicChannel) {
+            return;
+        }
+        auto scaled = s_enabled && Mod::get()->getSavedValue<bool>("speedhack-audio", false);
+        engine->m_backgroundMusicChannel->setPitch(
+            static_cast<float>(scaled ? s_rate : Default));
+    }
+
     void setRate(double value) {
         s_rate = boundedRate(value);
         if (Mod::get()->getSavedValue<double>("speedhack-rate", Default) != s_rate) {
@@ -58,6 +71,23 @@ namespace toasty::speedhack {
         applySpeed();
     }
 }
+
+class $modify(SpeedhackPlayLayer, PlayLayer) {
+    void resetLevel() {
+        PlayLayer::resetLevel();
+        applySpeed();
+    }
+
+    void loadFromCheckpoint(CheckpointObject* checkpoint) {
+        PlayLayer::loadFromCheckpoint(checkpoint);
+        applySpeed();
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        PlayLayer::destroyPlayer(player, object);
+        applySpeed();
+    }
+};
 
 $on_mod(Loaded) {
     s_rate = boundedRate(

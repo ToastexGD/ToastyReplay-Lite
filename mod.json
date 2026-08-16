@@ -52,6 +52,12 @@
 			"name": "Frame Fixes",
 			"description": "Record and apply player position fixes after each physics tick.",
 			"default": false
+		},
+		"watermark": {
+			"type": "bool",
+			"name": "Watermark",
+			"description": "Show the ToastyReplay Lite logo and version in the corner while the menu is open or a macro is recording or playing.",
+			"default": true
 		}
 	},
 	"resources": {

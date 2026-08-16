@@ -1,7 +1,9 @@
 #include "FrameStepper.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/binding/PlayLayer.hpp>
+#include <Geode/binding/PlayerObject.hpp>
 
 #include <chrono>
 
@@ -10,11 +12,32 @@ using namespace geode::prelude;
 namespace {
     using Clock = std::chrono::steady_clock;
     constexpr auto RepeatDelay = std::chrono::milliseconds(300);
+    constexpr auto RepeatInterval = std::chrono::milliseconds(110);
 
     bool s_enabled = false;
-    bool s_repeating = false;
+    bool s_keyHeld = false;
+    bool s_buttonHeld = false;
+    bool s_pausedMusic = false;
     int s_pending = 0;
-    Clock::time_point s_repeatSince;
+    Clock::time_point s_heldSince;
+    Clock::time_point s_lastRepeat;
+
+    bool anyHeld() {
+        return s_keyHeld || s_buttonHeld;
+    }
+
+    void applyHold(bool& source, bool held) {
+        if (!s_enabled) {
+            source = false;
+            return;
+        }
+        auto before = anyHeld();
+        source = held;
+        if (!before && anyHeld()) {
+            s_heldSince = Clock::now();
+            s_lastRepeat = s_heldSince;
+        }
+    }
 } // namespace
 
 namespace toasty::stepper {
@@ -25,9 +48,25 @@ namespace toasty::stepper {
     void setEnabled(bool value) {
         s_enabled = value;
         s_pending = 0;
-        s_repeating = false;
+        s_keyHeld = false;
+        s_buttonHeld = false;
+        syncMusic();
         if (Mod::get()->getSavedValue<bool>("frame-stepper", false) != value) {
             Mod::get()->setSavedValue<bool>("frame-stepper", value);
+        }
+    }
+
+    void syncMusic() {
+        auto engine = FMODAudioEngine::sharedEngine();
+        if (!engine) {
+            return;
+        }
+        if (s_enabled && PlayLayer::get()) {
+            engine->pauseAllMusic(true);
+            s_pausedMusic = true;
+        } else if (s_pausedMusic) {
+            engine->resumeAllMusic();
+            s_pausedMusic = false;
         }
     }
 
@@ -36,7 +75,14 @@ namespace toasty::stepper {
     }
 
     bool freezes() {
-        return s_enabled && PlayLayer::get();
+        if (!s_enabled) {
+            return false;
+        }
+        auto layer = PlayLayer::get();
+        if (!layer || layer->m_isPaused) {
+            return false;
+        }
+        return !layer->m_player1 || !layer->m_player1->m_isDead;
     }
 
     void stepOnce() {
@@ -45,15 +91,12 @@ namespace toasty::stepper {
         }
     }
 
-    void setRepeating(bool repeating) {
-        if (!s_enabled) {
-            s_repeating = false;
-            return;
-        }
-        if (repeating && !s_repeating) {
-            s_repeatSince = Clock::now();
-        }
-        s_repeating = repeating;
+    void setKeyHeld(bool held) {
+        applyHold(s_keyHeld, held);
+    }
+
+    void setButtonHeld(bool held) {
+        applyHold(s_buttonHeld, held);
     }
 
     bool takeStep() {
@@ -61,7 +104,15 @@ namespace toasty::stepper {
             s_pending--;
             return true;
         }
-        return s_repeating && Clock::now() - s_repeatSince >= RepeatDelay;
+        if (!anyHeld()) {
+            return false;
+        }
+        auto now = Clock::now();
+        if (now - s_heldSince < RepeatDelay || now - s_lastRepeat < RepeatInterval) {
+            return false;
+        }
+        s_lastRepeat = now;
+        return true;
     }
 } // namespace toasty::stepper
 

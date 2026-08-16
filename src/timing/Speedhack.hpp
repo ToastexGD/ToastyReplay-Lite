@@ -9,4 +9,5 @@ namespace toasty::speedhack {
     double rate();
     void setEnabled(bool value);
     void setRate(double value);
+    void syncAudio();
 }

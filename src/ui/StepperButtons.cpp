@@ -3,6 +3,7 @@
 #include "../timing/FrameStepper.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
 using namespace geode::prelude;
@@ -32,6 +33,14 @@ namespace toasty::ui {
     }
 } // namespace toasty::ui
 
+class $modify(StepperPauseLayer, PauseLayer) {
+    void onResume(CCObject* sender) {
+        PauseLayer::onResume(sender);
+        toasty::stepper::syncMusic();
+        toasty::ui::refreshStepperButtons();
+    }
+};
+
 class $modify(StepperPlayLayer, PlayLayer) {
     struct Fields {
         Ref<CCMenuItemSpriteExtra> stepButton;
@@ -58,6 +67,15 @@ class $modify(StepperPlayLayer, PlayLayer) {
         menu->addChild(stepButton);
         m_fields->stepButton = stepButton;
 
+        if (auto stopSprite = CCSprite::createWithSpriteFrameName("GJ_backBtn_001.png")) {
+            stopSprite->setScale(.5f);
+            auto stopButton = CCMenuItemSpriteExtra::create(
+                stopSprite, this, menu_selector(StepperPlayLayer::onStopStepper));
+            stopButton->setID("stop-stepper"_spr);
+            stopButton->setPosition({winSize.width - 102.f, 34.f});
+            menu->addChild(stopButton);
+        }
+
         CCNode* host = m_uiLayer ? static_cast<CCNode*>(m_uiLayer) : static_cast<CCNode*>(this);
         host->addChild(menu, 100);
         handleTouchPriority(menu);
@@ -67,14 +85,30 @@ class $modify(StepperPlayLayer, PlayLayer) {
         return true;
     }
 
+    void setupHasCompleted() {
+        PlayLayer::setupHasCompleted();
+        toasty::stepper::setEnabled(false);
+        toasty::ui::refreshStepperButtons();
+    }
+
+    void onQuit() {
+        toasty::stepper::setEnabled(false);
+        PlayLayer::onQuit();
+    }
+
     void pollStepButton(float dt) {
         auto button = m_fields->stepButton;
         auto parent = button ? button->getParent() : nullptr;
-        toasty::stepper::setRepeating(button && parent && parent->isVisible() &&
-                                      button->isSelected());
+        toasty::stepper::setButtonHeld(button && parent && parent->isVisible() &&
+                                       button->isSelected());
     }
 
     void onStep(CCObject* sender) {
         toasty::stepper::stepOnce();
+    }
+
+    void onStopStepper(CCObject* sender) {
+        toasty::stepper::setEnabled(false);
+        toasty::ui::refreshStepperButtons();
     }
 };

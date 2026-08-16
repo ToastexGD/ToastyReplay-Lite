@@ -6,6 +6,7 @@
 #include "../replay/TtrlStorage.hpp"
 #include "../timing/TpsBypass.hpp"
 #include "../ui/Notifications.hpp"
+#include "../ui/Watermark.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -41,6 +42,7 @@ namespace toasty::engine {
             replay.tickCount = std::max<uint64_t>(session.tick + (session.processingTick ? 1 : 0), 1);
             session.recording = {};
             session.mode = Mode::Off;
+            toasty::ui::refreshWatermark();
             return replay;
         }
 
@@ -66,6 +68,7 @@ namespace toasty::engine {
                 session.tpsOverride = false;
             }
             toasty::compat::endSession();
+            toasty::ui::refreshWatermark();
             if (layer && session.changedTestMode) {
                 layer->m_isTestMode = session.previousTestMode;
             }
@@ -145,6 +148,7 @@ namespace toasty::engine {
         session->recordingRate = toasty::tps::effectiveRate();
         session->mode = Mode::Record;
         resetAttempt(*session);
+        toasty::ui::refreshWatermark();
         toasty::notifications::show("Recording started", NotificationIcon::Info);
         return true;
     }
@@ -158,6 +162,7 @@ namespace toasty::engine {
         if (!save) {
             session->recording = {};
             session->mode = Mode::Off;
+            toasty::ui::refreshWatermark();
             return true;
         }
 
@@ -233,6 +238,7 @@ namespace toasty::engine {
         session->mode = Mode::Play;
         resetAttempt(*session);
         setSelectedReplay(std::move(name));
+        toasty::ui::refreshWatermark();
         log::info("Loaded replay {} with {} inputs", selectedReplay(), session->playback->inputs.size());
         toasty::notifications::show("Replay started", NotificationIcon::Info);
         return true;
