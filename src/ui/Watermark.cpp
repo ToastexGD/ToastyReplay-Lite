@@ -6,6 +6,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/ui/Label.hpp>
 
 #include <algorithm>
 
@@ -45,8 +46,7 @@ class $modify(WatermarkPlayLayer, PlayLayer) {
         node->setPosition({10.f, 10.f});
         node->setContentSize({120.f, IconSize});
 
-        auto label = CCLabelBMFont::create(Mod::get()->getVersion().toVString().c_str(),
-                                           "chatFont.fnt");
+        auto label = Label::create(Mod::get()->getVersion().toVString(), "chatFont.fnt");
         label->setAnchorPoint({0.f, .5f});
         label->setScale(.5f);
         label->setOpacity(150);
