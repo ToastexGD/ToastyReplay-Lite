@@ -9,12 +9,22 @@
 
 using namespace geode::prelude;
 
+$on_mod(Loaded) {
+    if (Mod::get()->setSavedValue<bool>("migrated-open-key", true))
+        return;
+
+    if (Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_T)) ==
+        static_cast<int>(KEY_F8)) {
+        Mod::get()->setSavedValue<int>("key-open-menu", static_cast<int>(KEY_T));
+    }
+}
+
 class $modify(ToastyFirstRun, MenuLayer) {
     bool init() {
         if (!MenuLayer::init())
             return false;
 
-        if (Mod::get()->setSavedValue<bool>("seen-open-hint", true))
+        if (Mod::get()->setSavedValue<bool>("seen-open-hint-v2", true))
             return true;
 
 #if defined(GEODE_IS_IOS)
