@@ -1,46 +1,47 @@
 #include "FrameStepper.hpp"
 
 #include <Geode/Geode.hpp>
+#include <asp/time/Instant.hpp>
+#include <asp/time/Duration.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/binding/PlayerObject.hpp>
 
-#include <chrono>
-
 using namespace geode::prelude;
 
-namespace {
-    using Clock = std::chrono::steady_clock;
-    constexpr auto RepeatDelay = std::chrono::milliseconds(300);
-    constexpr auto RepeatInterval = std::chrono::milliseconds(110);
-
-    bool s_enabled = false;
-    bool s_keyHeld = false;
-    bool s_buttonHeld = false;
-    bool s_pausedMusic = false;
-    int s_pending = 0;
-    Clock::time_point s_heldSince;
-    Clock::time_point s_lastRepeat;
-
-    bool anyHeld() {
-        return s_keyHeld || s_buttonHeld;
-    }
-
-    void applyHold(bool& source, bool held) {
-        if (!s_enabled) {
-            source = false;
-            return;
-        }
-        auto before = anyHeld();
-        source = held;
-        if (!before && anyHeld()) {
-            s_heldSince = Clock::now();
-            s_lastRepeat = s_heldSince;
-        }
-    }
-} // namespace
-
 namespace toasty::stepper {
+    namespace detail {
+        constexpr auto RepeatDelay = asp::time::Duration::fromMillis(300);
+        constexpr auto RepeatInterval = asp::time::Duration::fromMillis(110);
+
+        bool s_enabled = false;
+        bool s_keyHeld = false;
+        bool s_buttonHeld = false;
+        bool s_pausedMusic = false;
+        int s_pending = 0;
+        asp::time::Instant s_heldSince;
+        asp::time::Instant s_lastRepeat;
+
+        bool anyHeld() {
+            return s_keyHeld || s_buttonHeld;
+        }
+
+        void applyHold(bool& source, bool held) {
+            if (!s_enabled) {
+                source = false;
+                return;
+            }
+            auto before = anyHeld();
+            source = held;
+            if (!before && anyHeld()) {
+                s_heldSince = asp::time::Instant::now();
+                s_lastRepeat = s_heldSince;
+            }
+        }
+    } // namespace detail
+
+    using namespace detail;
+
     bool enabled() {
         return s_enabled;
     }
@@ -107,8 +108,8 @@ namespace toasty::stepper {
         if (!anyHeld()) {
             return false;
         }
-        auto now = Clock::now();
-        if (now - s_heldSince < RepeatDelay || now - s_lastRepeat < RepeatInterval) {
+        auto now = asp::time::Instant::now();
+        if (s_heldSince.elapsed() < RepeatDelay || s_lastRepeat.elapsed() < RepeatInterval) {
             return false;
         }
         s_lastRepeat = now;
@@ -117,5 +118,7 @@ namespace toasty::stepper {
 } // namespace toasty::stepper
 
 $on_mod(Loaded) {
+    using namespace toasty::stepper::detail;
+
     s_enabled = Mod::get()->getSavedValue<bool>("frame-stepper", false);
 }
