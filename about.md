@@ -30,13 +30,13 @@ ToastyReplay-Lite records vanilla inputs. Recording is NOT compatible with the f
 - CBF (Click Between Frames)
 - CBS (Click Between Steps)
 - Frame Extrapolation (Megahack) ~~Situational~~
-- ANY other TPS bypass, Whether Silicate, Megahack, GDH, Eclipse, list goes on...
+- ANY other TPS bypass, whether Silicate, Megahack, GDH, Eclipse, list goes on...
 
 Find advanced options in the geode settings for the more experienced botters.
 
 ## <cs>Credits & Info</c>
 
-**HUGE THANKS** to Peony, and developers of Silicate, and to Chag (owner of TCBot) for having amazing reference points, and understanding.
+**HUGE THANKS** to Peony, the developers of Silicate, and to Chag (owner of TCBot) for having amazing reference points and understanding.
 
 Inspired by XdBot and ZBot, go check them out!
 
@@ -49,10 +49,10 @@ Inspired by XdBot and ZBot, go check them out!
 
 ### Additional Information
 
-ToastyReplay-Lite isn't the first product of me, ToastyReplay was initially the first developed bot in the series, following it ToastyReplay-Pro, If you would like to support me, future updates, and compatability with the mod and it's future releases, I'd really appreciate if you check it out! 
+ToastyReplay-Lite isn't my first product; ToastyReplay was initially the first developed bot in the series, following it ToastyReplay-Pro. If you would like to support me, future updates, and compatibility with the mod and its future releases, I'd really appreciate it if you check it out! 
 
 ### Join the Discord!
 
-Want your feature ported/added to the menu? Join the discord and make a ticket, we have a friendly community of supporters, and tons of macros
+Want your feature ported/added to the menu? Join the Discord and make a ticket; we have a friendly community of supporters and tons of macros
 
 [Discord](https://discord.gg/7sugAx4byf) | [Pro](https://toastyreplay.xyz/)
