@@ -26,6 +26,7 @@ using toasty::replay::InputPlayer;
 
 namespace {
     bool s_frameFixes = false;
+    bool s_commandsHookAlive = false;
 
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
@@ -99,32 +100,34 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
     }
 
-    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+    Session* tickSession() {
         auto session = toasty::engine::activeSession();
         auto layer = PlayLayer::get();
         if (!session || !layer || static_cast<GJBaseGameLayer*>(layer) !=
                                       static_cast<GJBaseGameLayer*>(this)) {
-            GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+            return nullptr;
+        }
+        return session;
+    }
+
+    void feedPlaybackInputs(Session* session) {
+        if (session->mode != Mode::Play || !session->playback) {
             return;
         }
-
-        session->processingTick = true;
-        if (session->mode == Mode::Play && session->playback) {
-            auto& replay = *session->playback;
-            while (session->nextInput < replay.inputs.size() &&
-                   replay.inputs[session->nextInput].beforeTick <= session->tick) {
-                auto const& input = replay.inputs[session->nextInput++];
-                session->acceptingPlaybackInput = true;
-                this->handleButton(input.pressed,
-                                   static_cast<int>(input.button),
-                                   input.player == InputPlayer::Player1);
-                session->acceptingPlaybackInput = false;
-                session->heldInputs[heldIndex(input.button, input.player)] = input.pressed;
-            }
+        auto& replay = *session->playback;
+        while (session->nextInput < replay.inputs.size() &&
+               replay.inputs[session->nextInput].beforeTick <= session->tick) {
+            auto const& input = replay.inputs[session->nextInput++];
+            session->acceptingPlaybackInput = true;
+            this->handleButton(input.pressed,
+                               static_cast<int>(input.button),
+                               input.player == InputPlayer::Player1);
+            session->acceptingPlaybackInput = false;
+            session->heldInputs[heldIndex(input.button, input.player)] = input.pressed;
         }
+    }
 
-        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-
+    void closeTick(Session* session, PlayLayer* layer) {
         if (session->mode == Mode::Play && session->playback) {
             auto& replay = *session->playback;
             if (s_frameFixes) {
@@ -147,8 +150,44 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             }
             session->tick++;
         }
+    }
+
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+        s_commandsHookAlive = true;
+
+        auto session = this->tickSession();
+        if (!session) {
+            GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+            return;
+        }
+
+        session->processingTick = true;
+        this->feedPlaybackInputs(session);
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        this->closeTick(session, PlayLayer::get());
         session->processingTick = false;
     }
+
+#ifdef GEODE_IS_MACOS
+    void processQueuedButtons(float dt, bool clearInputQueue) {
+        if (s_commandsHookAlive || dt <= 0.f) {
+            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+            return;
+        }
+
+        auto session = this->tickSession();
+        if (!session) {
+            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+            return;
+        }
+
+        session->processingTick = true;
+        this->feedPlaybackInputs(session);
+        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+        this->closeTick(session, PlayLayer::get());
+        session->processingTick = false;
+    }
+#endif
 };
 
 class $modify(ToastyReplayPlayLayer, PlayLayer) {
