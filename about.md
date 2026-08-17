@@ -6,7 +6,7 @@
 
 ## <cg>Using the menu</c>
 
-1. Press **F8** to open ToastyReplay Lite.
+1. Press **T** to open ToastyReplay Lite.
 2. Press **F1** or select **Record**.
 3. Complete the level.
 4. Select the saved macro and press **Replay**.

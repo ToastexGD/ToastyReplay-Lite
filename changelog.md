@@ -8,4 +8,6 @@
 - Add a TPS bypass, speedhack and replay specific random seeds.
 - Add practice support so recording and playback resume from checkpoints.
 - Disable Click Between Frames and Click Between Steps only while recording or playing, then restore them.
-- Requires Geode 5.9.0 or newer.
+- Requires Geode 5.9.0
+
+- TTRL converter coming soon.

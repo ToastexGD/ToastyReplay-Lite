@@ -319,7 +319,7 @@ bool ToastyMenu::init() {
         auto scroll = this->addScroll(page, TabKeybinds, {ROW_X, 26.f}, {ROW_W, 206.f});
 
         scroll->m_contentLayer->addChild(
-            this->makeKeybindRow("Open Menu", "key-open-menu", KEY_F8));
+            this->makeKeybindRow("Open Menu", "key-open-menu", KEY_T));
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Record", "key-record", KEY_F1));
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Replay", "key-replay", KEY_F2));
         scroll->m_contentLayer->addChild(
@@ -965,7 +965,7 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
         s_captureBtn = nullptr;
         return true;
     }
-    auto openKey = Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_F8));
+    auto openKey = Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_T));
     if (static_cast<int>(key) == openKey) {
         if (s_instance)
             s_instance->onClose(nullptr);
