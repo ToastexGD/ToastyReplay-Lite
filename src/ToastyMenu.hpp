@@ -6,6 +6,8 @@
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/ui/Scrollbar.hpp>
 #include <Geode/ui/TextArea.hpp>
+#include <filesystem>
+#include <optional>
 #include <vector>
 
 using namespace geode::prelude;
@@ -45,6 +47,7 @@ class ToastyMenu : public geode::Popup {
     ~ToastyMenu();
     void addHeader();
     void addSidebar();
+    void addSocialButton(CCMenu* menu, CCSprite* icon, ZStringView id, ZStringView url);
     Group makePage(int tab);
     void addPageTitle(CCNode* page, ZStringView title, ZStringView hint = {});
     NineSlice* addPanel(CCNode* page, CCPoint center, CCSize size);
@@ -85,7 +88,10 @@ class ToastyMenu : public geode::Popup {
     void onReplayMacro(CCObject* sender);
     void onRenameMacro(CCObject* sender);
     void onDeleteMacro(CCObject* sender);
+    static void finishAddMacroFile(std::optional<std::filesystem::path> picked);
+    void onAddMacroFile(CCObject* sender);
     void onOpenFolder(CCObject* sender);
+    void onSocialLink(CCObject* sender);
     void onAccentColor(CCObject* sender);
     void setAccentColor(ccColor3B color);
     void onScaleSlider(CCObject* sender);

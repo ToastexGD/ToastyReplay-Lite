@@ -48,6 +48,7 @@ namespace toasty::replay::ttrl {
 
         asp::fs::path const& directory() const;
         SaveResult save(geode::ZStringView name, Replay const& replay) const;
+        SaveResult importFile(asp::fs::path const& source) const;
         LoadResult load(geode::ZStringView fileName) const;
         RemoveResult remove(geode::ZStringView fileName) const;
         RenameResult rename(geode::ZStringView fileName, geode::ZStringView name) const;

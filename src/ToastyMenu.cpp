@@ -1,7 +1,10 @@
 #include "ToastyMenu.hpp"
+#include <arc/future/Future.hpp>
 #include <asp/iter.hpp>
 #include <fmt/ranges.h>
 #include <Geode/ui/ColorPickPopup.hpp>
+#include <Geode/utils/async.hpp>
+#include <Geode/utils/web.hpp>
 #include "engine/Engine.hpp"
 #include "engine/RandomSeed.hpp"
 #include "replay/TtrlStorage.hpp"
@@ -17,21 +20,40 @@
 static constexpr float POPUP_W = 450.f;
 static constexpr float POPUP_H = 290.f;
 static constexpr float MARGIN = 12.f;
+static constexpr float GAP = 10.f;
 static constexpr float HEADER_Y = 272.f;
+static constexpr float HEADER_ICON = 22.f;
 static constexpr float DIVIDER_Y = 256.f;
+static constexpr float CONTENT_TOP = 236.f;
+static constexpr float CONTENT_BOTTOM = MARGIN;
 static constexpr float SIDE_X = 58.f;
 static constexpr float SIDE_W = 92.f;
+static constexpr float SIDE_PAD = 9.f;
+static constexpr float TAB_W = 74.f;
+static constexpr float TAB_H = 26.f;
+static constexpr float TAB_GAP = 10.f;
+static constexpr float SOCIAL_ICON = 26.f;
+static constexpr float SOCIAL_Y = CONTENT_BOTTOM + SOCIAL_ICON / 2.f;
+static constexpr float SIDE_BOTTOM = SOCIAL_Y + SOCIAL_ICON / 2.f + GAP;
 static constexpr float PANEL_X = 269.f;
 static constexpr float PANEL_W = 314.f;
 static constexpr float PANEL_LEFT = PANEL_X - PANEL_W / 2.f;
+static constexpr float PANEL_RIGHT = PANEL_X + PANEL_W / 2.f;
+static constexpr float PANEL_PAD = 4.f;
 static constexpr float SCROLLBAR_X = 434.f;
 static constexpr float TITLE_Y = 246.f;
+static constexpr float MAIN_PANEL_TOP = 186.f;
 static constexpr float ROW_X = 116.f;
 static constexpr float ROW_W = 306.f;
 static constexpr float ROW_H = 26.f;
+static constexpr float ROW_PAD = 10.f;
+static constexpr float CTRL_GAP = 8.f;
+static constexpr float MACRO_ROW_H = 30.f;
+static constexpr float FOOTER_H = 30.f;
+static constexpr float FOOTER_ICON = 24.f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
-static constexpr float ROW_CONTROL_RIGHT = 297.f;
+static constexpr float ROW_CONTROL_RIGHT = ROW_W - ROW_PAD;
 
 static void
 moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
@@ -50,6 +72,18 @@ static geode::NineSlice* makeBG(CCSize size, ccColor3B color, GLubyte opacity, b
     bg->setColor(color);
     bg->setOpacity(opacity);
     return bg;
+}
+
+static float placeRight(CCNode* node, float right, float y) {
+    auto width = node->getScaledContentWidth();
+    node->setPosition({right - width / 2.f, y});
+    return right - width - CTRL_GAP;
+}
+
+static float placeLeft(CCNode* node, float left, float y) {
+    auto width = node->getScaledContentWidth();
+    node->setPosition({left + width / 2.f, y});
+    return left + width + CTRL_GAP;
 }
 
 static CCNode* makeTextRow(std::string text, float scale) {
@@ -200,12 +234,12 @@ bool ToastyMenu::init() {
                 CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onMode));
             item->setTag(i);
             item->setID(modeIds[i]);
-            item->setPosition({PANEL_LEFT + 49.f + i * 108.f, 214.f});
+            item->setPosition({PANEL_LEFT + 49.f + i * 108.f, MAIN_PANEL_TOP + GAP + 20.f});
             menu->addChild(item);
         }
 
-        this->addPanel(page, {PANEL_X, 104.f}, {PANEL_W, 164.f});
-        auto scroll = this->addScroll(page, TabMain, {ROW_X, 26.f}, {ROW_W, 156.f});
+        this->addPanel(page, {PANEL_X, (MAIN_PANEL_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, MAIN_PANEL_TOP - CONTENT_BOTTOM});
+        auto scroll = this->addScroll(page, TabMain, {ROW_X, CONTENT_BOTTOM + PANEL_PAD}, {ROW_W, MAIN_PANEL_TOP - CONTENT_BOTTOM - PANEL_PAD * 2.f});
 
         scroll->m_contentLayer->addChild(this->makeNoclipRow());
         scroll->m_contentLayer->addChild(this->makeTpsRow());
@@ -224,20 +258,60 @@ bool ToastyMenu::init() {
 
     // macros page
     {
-        auto [page, menu] = this->makePage(TabMacros);
+        auto page = this->makePage(TabMacros).node;
         this->addPageTitle(page, "Macro List", nullptr);
 
+        this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
+
+        float footerBottom = CONTENT_BOTTOM + PANEL_PAD;
+        float footerY = footerBottom + FOOTER_H / 2.f;
+
+        auto footer = makeBG({ROW_W, FOOTER_H}, {0, 0, 0}, 45, true);
+        footer->setPosition({PANEL_X, footerY});
+        page->addChild(footer);
+
+        auto footerMenu = CCMenu::create();
+        footerMenu->setPosition({0.f, 0.f});
+        footerMenu->setContentSize(m_size);
+        footerMenu->setID("macro-footer");
+        page->addChild(footerMenu);
+
+        float scrollBottom = footerBottom + FOOTER_H + PANEL_PAD;
+        m_macroScroll = this->addScroll(page,
+                                        TabMacros,
+                                        {ROW_X, scrollBottom},
+                                        {ROW_W, CONTENT_TOP - PANEL_PAD - scrollBottom});
+
+        float footerNext = ROW_X + ROW_PAD;
+
+        if (auto plusSpr = CCSprite::createWithSpriteFrameName("GJ_plusBtn_001.png")) {
+            plusSpr->setScale(FOOTER_ICON /
+                              std::max(plusSpr->getContentWidth(), plusSpr->getContentHeight()));
+            auto addBtn = CCMenuItemSpriteExtra::create(
+                plusSpr, this, menu_selector(ToastyMenu::onAddMacroFile));
+            addBtn->setID("add-from-file");
+            footerNext = placeLeft(addBtn, footerNext, footerY);
+            footerMenu->addChild(addBtn);
+        }
+
         if (auto refreshSpr = CCSprite::createWithSpriteFrameName("GJ_updateBtn_001.png")) {
-            refreshSpr->setScale(.4f);
+            refreshSpr->setScale(
+                FOOTER_ICON /
+                std::max(refreshSpr->getContentWidth(), refreshSpr->getContentHeight()));
             auto refreshBtn = CCMenuItemSpriteExtra::create(
                 refreshSpr, this, menu_selector(ToastyMenu::onRefreshMacros));
             refreshBtn->setID("refresh-macros");
-            refreshBtn->setPosition({426.f, TITLE_Y});
-            menu->addChild(refreshBtn);
+            placeLeft(refreshBtn, footerNext, footerY);
+            footerMenu->addChild(refreshBtn);
         }
 
-        this->addPanel(page, {PANEL_X, 129.f}, {PANEL_W, 214.f});
-        m_macroScroll = this->addScroll(page, TabMacros, {ROW_X, 26.f}, {ROW_W, 206.f});
+        auto replaySpr = ButtonSprite::create("Replay", "bigFont.fnt", "GJ_button_01.png", .8f);
+        replaySpr->setScale(.6f);
+        auto replayBtn = CCMenuItemSpriteExtra::create(
+            replaySpr, this, menu_selector(ToastyMenu::onReplayMacro));
+        replayBtn->setID("replay");
+        placeRight(replayBtn, ROW_X + ROW_W - ROW_PAD, footerY);
+        footerMenu->addChild(replayBtn);
 
         this->refreshMacroList();
     }
@@ -247,8 +321,8 @@ bool ToastyMenu::init() {
         auto page = this->makePage(TabSettings).node;
         this->addPageTitle(page, "Settings", nullptr);
 
-        this->addPanel(page, {PANEL_X, 129.f}, {PANEL_W, 214.f});
-        auto scroll = this->addScroll(page, TabSettings, {ROW_X, 26.f}, {ROW_W, 206.f});
+        this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
+        auto scroll = this->addScroll(page, TabSettings, {ROW_X, CONTENT_BOTTOM + PANEL_PAD}, {ROW_W, CONTENT_TOP - CONTENT_BOTTOM - PANEL_PAD * 2.f});
 
         // menu scale is live so the popup can be sized before anything else exists
         auto scaleRow = this->makeRow("Menu Scale", ROW_H, 95.f);
@@ -315,8 +389,8 @@ bool ToastyMenu::init() {
         auto page = this->makePage(TabKeybinds).node;
         this->addPageTitle(page, "Keybinds", "Windows & macOS");
 
-        this->addPanel(page, {PANEL_X, 129.f}, {PANEL_W, 214.f});
-        auto scroll = this->addScroll(page, TabKeybinds, {ROW_X, 26.f}, {ROW_W, 206.f});
+        this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
+        auto scroll = this->addScroll(page, TabKeybinds, {ROW_X, CONTENT_BOTTOM + PANEL_PAD}, {ROW_W, CONTENT_TOP - CONTENT_BOTTOM - PANEL_PAD * 2.f});
 
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Open Menu", "key-open-menu", KEY_T));
@@ -338,8 +412,8 @@ bool ToastyMenu::init() {
         auto page = this->makePage(TabAbout).node;
         this->addPageTitle(page, "About", nullptr);
 
-        this->addPanel(page, {PANEL_X, 129.f}, {PANEL_W, 214.f});
-        auto scroll = this->addScroll(page, TabAbout, {ROW_X, 26.f}, {ROW_W, 206.f});
+        this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
+        auto scroll = this->addScroll(page, TabAbout, {ROW_X, CONTENT_BOTTOM + PANEL_PAD}, {ROW_W, CONTENT_TOP - CONTENT_BOTTOM - PANEL_PAD * 2.f});
 
         scroll->m_contentLayer->addChild(this->makeSectionRow(Mod::get()->getName().data()));
 
@@ -388,9 +462,19 @@ bool ToastyMenu::init() {
 }
 
 void ToastyMenu::addHeader() {
+    float titleX = MARGIN;
+    if (auto icon = CCSprite::create("MenuIcon.png"_spr)) {
+        icon->setScale(HEADER_ICON / std::max(icon->getContentWidth(), icon->getContentHeight()));
+        icon->setAnchorPoint({0.f, .5f});
+        icon->setPosition({MARGIN, HEADER_Y});
+        icon->setID("header-icon");
+        m_mainLayer->addChild(icon);
+        titleX = MARGIN + HEADER_ICON + GAP;
+    }
+
     auto title = CCLabelBMFont::create("ToastyReplay Lite", "goldFont.fnt");
     title->setAnchorPoint({0.f, .5f});
-    title->setPosition({16.f, HEADER_Y});
+    title->setPosition({titleX, HEADER_Y});
     title->limitLabelWidth(165.f, .5f, .1f);
     m_mainLayer->addChild(title);
 
@@ -406,8 +490,9 @@ void ToastyMenu::addHeader() {
 }
 
 void ToastyMenu::addSidebar() {
-    auto sidebar = makeBG({SIDE_W, 214.f}, PANEL_COLOR, 220, false);
-    sidebar->setPosition({SIDE_X, 129.f});
+    float sidebarHeight = CONTENT_TOP - SIDE_BOTTOM;
+    auto sidebar = makeBG({SIDE_W, sidebarHeight}, PANEL_COLOR, 220, false);
+    sidebar->setPosition({SIDE_X, SIDE_BOTTOM + sidebarHeight / 2.f});
     m_mainLayer->addChild(sidebar);
 
     auto menu = CCMenu::create();
@@ -417,26 +502,62 @@ void ToastyMenu::addSidebar() {
     m_mainLayer->addChild(menu, 10);
 
     const char* tabNames[TabCount] = {"Main", "Macros", "Settings", "Keybinds", "About"};
+    float tabTop = CONTENT_TOP - SIDE_PAD - TAB_H / 2.f;
     for (auto [i, name] : asp::iter::enumerate(tabNames)) {
         auto node = CCNode::create();
-        node->setContentSize({84.f, 26.f});
+        node->setContentSize({TAB_W, TAB_H});
 
         auto bg = makeBG(node->getContentSize(), {0, 0, 0}, 70, true);
-        bg->setPosition({42.f, 13.f});
+        bg->setPosition({TAB_W / 2.f, TAB_H / 2.f});
         node->addChild(bg);
         m_tabBgs[i] = bg;
 
         auto label = CCLabelBMFont::create(name, "bigFont.fnt");
         label->setAnchorPoint({0.f, .5f});
-        label->setPosition({10.f, 13.f});
-        label->limitLabelWidth(64.f, .4f, .1f);
+        label->setPosition({ROW_PAD, TAB_H / 2.f});
+        label->limitLabelWidth(TAB_W - ROW_PAD * 2.f, .4f, .1f);
         node->addChild(label);
 
         auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onTab));
         item->setTag(static_cast<int>(i));
-        item->setPosition({SIDE_X, 215.f - static_cast<float>(i) * 30.f});
+        item->setPosition({SIDE_X, tabTop - static_cast<float>(i) * (TAB_H + TAB_GAP)});
         menu->addChild(item);
     }
+
+    auto social = CCMenu::create();
+    social->setID("social-menu");
+    social->setAnchorPoint({.5f, .5f});
+    social->setContentSize({SOCIAL_ICON * 3.f + CTRL_GAP * 2.f, SOCIAL_ICON});
+    social->setPosition({SIDE_X, SOCIAL_Y});
+    social->setLayout(
+        RowLayout::create()->setGap(CTRL_GAP)->setAxisAlignment(AxisAlignment::Center));
+    m_mainLayer->addChild(social, 10);
+
+    this->addSocialButton(social,
+                          CCSprite::create("KofiIcon.png"_spr),
+                          "kofi-button",
+                          "https://ko-fi.com/toastexgd");
+    this->addSocialButton(social,
+                          CCSprite::createWithSpriteFrameName("gj_ytIcon_001.png"),
+                          "youtube-button",
+                          "https://www.youtube.com/@Toastex_");
+    this->addSocialButton(social,
+                          CCSprite::createWithSpriteFrameName("geode.loader/github.png"),
+                          "github-button",
+                          "https://github.com/ToastexGD/ToastyReplay-Lite");
+    social->updateLayout();
+}
+
+void ToastyMenu::addSocialButton(CCMenu* menu, CCSprite* icon, ZStringView id, ZStringView url) {
+    if (!icon) {
+        return;
+    }
+    icon->setScale(SOCIAL_ICON / std::max(icon->getContentWidth(), icon->getContentHeight()));
+
+    auto item = CCMenuItemSpriteExtra::create(icon, this, menu_selector(ToastyMenu::onSocialLink));
+    item->setID(id);
+    item->setUserObject(CCString::create(url.c_str()));
+    menu->addChild(item);
 }
 
 ToastyMenu::Group ToastyMenu::makePage(int tab) {
@@ -457,7 +578,7 @@ void ToastyMenu::addPageTitle(CCNode* page, ZStringView title, ZStringView hint)
     auto label = CCLabelBMFont::create(title.c_str(), "goldFont.fnt");
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({PANEL_LEFT, TITLE_Y});
-    label->limitLabelWidth(160.f, .4f, .1f);
+    label->limitLabelWidth(160.f, .5f, .1f);
     page->addChild(label);
 
     if (hint.empty())
@@ -528,7 +649,7 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on, bo
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
+    placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
     toggle->toggle(on);
     toggle->setID(fmt::format("{}-toggle", id));
     toggle->setEnabled(enabled);
@@ -586,7 +707,7 @@ CCNode* ToastyMenu::makeSeedRow() {
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    toggle->setPosition({ROW_W - 18.f, 16.f});
+    placeRight(toggle, ROW_CONTROL_RIGHT, 16.f);
     toggle->toggle(toasty::seed::enabled());
     toggle->setID("set-seed-toggle");
     row.menu->addChild(toggle);
@@ -646,7 +767,7 @@ CCNode* ToastyMenu::makeSpeedhackRow() {
 
     m_speedToggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onSpeedhackToggle), .6f);
-    m_speedToggle->setPosition({ROW_W - 18.f, 16.f});
+    placeRight(m_speedToggle, ROW_CONTROL_RIGHT, 16.f);
     m_speedToggle->toggle(toasty::speedhack::enabled());
     row.menu->addChild(m_speedToggle);
 
@@ -704,7 +825,7 @@ CCNode* ToastyMenu::makeTpsRow() {
 
     m_tpsToggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onTpsToggle), .6f);
-    m_tpsToggle->setPosition({ROW_W - 18.f, 16.f});
+    placeRight(m_tpsToggle, ROW_CONTROL_RIGHT, 16.f);
     m_tpsToggle->toggle(toasty::tps::enabled());
     row.menu->addChild(m_tpsToggle);
 
@@ -721,21 +842,21 @@ CCNode* ToastyMenu::makeNoclipRow() {
     auto row = this->makeRow("Noclip", ROW_H, 140.f);
     row.node->setID("noclip");
 
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onToggleOption), .6f);
+    auto next = placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
+    toggle->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
+    toggle->setID("noclip-toggle");
+    row.menu->addChild(toggle);
+
     if (auto gearSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
         gearSpr->setScale(.45f);
         auto gear = CCMenuItemSpriteExtra::create(
             gearSpr, this, menu_selector(ToastyMenu::onNoclipOptions));
         gear->setID("options");
-        gear->setPosition({ROW_W - 48.f, ROW_H / 2.f});
+        placeRight(gear, next, ROW_H / 2.f);
         row.menu->addChild(gear);
     }
-
-    auto toggle = CCMenuItemToggler::createWithStandardSprites(
-        this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
-    toggle->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
-    toggle->setID("noclip-toggle");
-    row.menu->addChild(toggle);
 
     return row.node;
 }
@@ -744,21 +865,21 @@ CCNode* ToastyMenu::makeFrameStepperRow() {
     auto row = this->makeRow("Frame Stepper", ROW_H, 140.f);
     row.node->setID("frame-stepper");
 
+    auto toggle = CCMenuItemToggler::createWithStandardSprites(
+        this, menu_selector(ToastyMenu::onFrameStepperToggle), .6f);
+    auto next = placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
+    toggle->toggle(toasty::stepper::enabled());
+    toggle->setID("frame-stepper-toggle");
+    row.menu->addChild(toggle);
+
     if (auto gearSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
         gearSpr->setScale(.45f);
         auto gear = CCMenuItemSpriteExtra::create(
             gearSpr, this, menu_selector(ToastyMenu::onFrameStepperOptions));
         gear->setID("options");
-        gear->setPosition({ROW_W - 48.f, ROW_H / 2.f});
+        placeRight(gear, next, ROW_H / 2.f);
         row.menu->addChild(gear);
     }
-
-    auto toggle = CCMenuItemToggler::createWithStandardSprites(
-        this, menu_selector(ToastyMenu::onFrameStepperToggle), .6f);
-    toggle->setPosition({ROW_W - 18.f, ROW_H / 2.f});
-    toggle->toggle(toasty::stepper::enabled());
-    toggle->setID("frame-stepper-toggle");
-    row.menu->addChild(toggle);
 
     return row.node;
 }
@@ -780,46 +901,31 @@ CCNode* ToastyMenu::makeSectionRow(ZStringView title) {
 
 CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
     auto row = CCNode::create();
-    row->setContentSize({ROW_W, 28.f});
+    row->setContentSize({ROW_W, MACRO_ROW_H});
+    float middle = MACRO_ROW_H / 2.f;
 
     auto bg = makeBG(row->getContentSize(), {0, 0, 0}, 45, true);
-    bg->setPosition({ROW_W / 2.f, 14.f});
+    bg->setPosition({ROW_W / 2.f, middle});
     row->addChild(bg);
     m_macroRowBgs.push_back(bg);
-
-    auto displayName = toasty::replay::ttrl::displayName(fileName);
-    auto label = CCLabelBMFont::create(displayName.c_str(), "chatFont.fnt");
-    label->setAnchorPoint({0.f, .5f});
-    label->setPosition({10.f, 14.f});
-    label->limitLabelWidth(155.f, .65f, .1f);
-    row->addChild(label);
 
     auto menu = CCMenu::create();
     menu->setPosition({0.f, 0.f});
     menu->setContentSize(row->getContentSize());
     row->addChild(menu);
 
-    if (auto hitSpr = CCSprite::create("square02b_001.png")) {
-        hitSpr->setOpacity(0);
-        hitSpr->setContentSize({170.f, 28.f});
-        auto hitBtn =
-            CCMenuItemSpriteExtra::create(hitSpr, this, menu_selector(ToastyMenu::onSelectMacro));
-        hitBtn->setTag(index);
-        hitBtn->setPosition({85.f, 14.f});
-        hitBtn->setID("select");
-        setMacroName(hitBtn, fileName);
-        menu->addChild(hitBtn);
-    }
+    float next = ROW_CONTROL_RIGHT;
 
-    auto replaySpr = ButtonSprite::create("Replay", "bigFont.fnt", "GJ_button_01.png", .8f);
-    replaySpr->setScale(.4f);
-    auto replayBtn =
-        CCMenuItemSpriteExtra::create(replaySpr, this, menu_selector(ToastyMenu::onReplayMacro));
-    replayBtn->setTag(index);
-    replayBtn->setID("replay");
-    setMacroName(replayBtn, fileName);
-    replayBtn->setPosition({222.f, 14.f});
-    menu->addChild(replayBtn);
+    if (auto deleteSpr = CCSprite::createWithSpriteFrameName("GJ_deleteBtn_001.png")) {
+        deleteSpr->setScale(.5f);
+        auto deleteBtn = CCMenuItemSpriteExtra::create(
+            deleteSpr, this, menu_selector(ToastyMenu::onDeleteMacro));
+        deleteBtn->setTag(index);
+        deleteBtn->setID("delete");
+        setMacroName(deleteBtn, fileName);
+        next = placeRight(deleteBtn, next, middle);
+        menu->addChild(deleteBtn);
+    }
 
     if (auto renameSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
         renameSpr->setScale(.45f);
@@ -828,20 +934,29 @@ CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
         renameBtn->setTag(index);
         renameBtn->setID("rename");
         setMacroName(renameBtn, fileName);
-        renameBtn->setPosition({268.f, 14.f});
+        next = placeRight(renameBtn, next, middle);
         menu->addChild(renameBtn);
     }
 
-    auto deleteSpr = CCSprite::createWithSpriteFrameName("GJ_deleteBtn_001.png");
-    if (deleteSpr) {
-        deleteSpr->setScale(.5f);
-        auto deleteBtn = CCMenuItemSpriteExtra::create(
-            deleteSpr, this, menu_selector(ToastyMenu::onDeleteMacro));
-        deleteBtn->setTag(index);
-        deleteBtn->setID("delete");
-        setMacroName(deleteBtn, fileName);
-        deleteBtn->setPosition({292.f, 14.f});
-        menu->addChild(deleteBtn);
+    float nameWidth = next - ROW_PAD;
+
+    auto displayName = toasty::replay::ttrl::displayName(fileName);
+    auto label = CCLabelBMFont::create(displayName.c_str(), "chatFont.fnt");
+    label->setAnchorPoint({0.f, .5f});
+    label->setPosition({ROW_PAD, middle});
+    label->limitLabelWidth(nameWidth, .65f, .1f);
+    row->addChild(label);
+
+    if (auto hitSpr = CCSprite::create("square02b_001.png")) {
+        hitSpr->setOpacity(0);
+        hitSpr->setContentSize({nameWidth + ROW_PAD, MACRO_ROW_H});
+        auto hitBtn =
+            CCMenuItemSpriteExtra::create(hitSpr, this, menu_selector(ToastyMenu::onSelectMacro));
+        hitBtn->setTag(index);
+        hitBtn->setPosition({(nameWidth + ROW_PAD) / 2.f, middle});
+        hitBtn->setID("select");
+        setMacroName(hitBtn, fileName);
+        menu->addChild(hitBtn);
     }
 
     return row;
@@ -859,7 +974,7 @@ CCNode* ToastyMenu::makeKeybindRow(ZStringView title, ZStringView saveId, enumKe
     auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(ToastyMenu::onBindKey));
     btn->setUserObject(CCString::create(saveId.c_str()));
     btn->setID("bind");
-    btn->setPosition({272.f, 16.f});
+    placeRight(btn, ROW_CONTROL_RIGHT, 16.f);
     row.menu->addChild(btn);
     return row.node;
 }
@@ -1244,10 +1359,59 @@ void ToastyMenu::onSelectMacro(CCObject* sender) {
     }
 }
 
+void ToastyMenu::finishAddMacroFile(std::optional<std::filesystem::path> picked) {
+    if (!picked) {
+        return;
+    }
+
+    toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
+    auto imported = storage.importFile(*picked);
+    if (imported.isErr()) {
+        FLAlertLayer::create("Import Failed",
+                             toasty::replay::ttrl::describe(imported.unwrapErr()),
+                             "OK")
+            ->show();
+        return;
+    }
+
+    if (s_instance) {
+        s_instance->refreshMacroList();
+    }
+    toasty::notifications::show(
+        fmt::format("Added {}", toasty::replay::ttrl::displayName(imported.unwrap())),
+        NotificationIcon::Success);
+}
+
+void ToastyMenu::onAddMacroFile(CCObject*) {
+    utils::file::FilePickOptions options;
+    options.filters.push_back({"ToastyReplay Macro", {"*.ttrl"}});
+
+    async::spawn([options = std::move(options)]() -> arc::Future<void> {
+        auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
+        queueInMainThread([result = std::move(result)]() mutable {
+            if (result.isErr()) {
+                toasty::notifications::show("Unable to open the file picker",
+                                            NotificationIcon::Error);
+                return;
+            }
+            ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
+        });
+    });
+}
+
 void ToastyMenu::onOpenFolder(CCObject*) {
     if (!geode::utils::file::openFolder(Mod::get()->getSaveDir())) {
         toasty::notifications::show("Unable to open mod folder", NotificationIcon::Error);
     }
+}
+
+void ToastyMenu::onSocialLink(CCObject* sender) {
+    auto node = typeinfo_cast<CCNode*>(sender);
+    auto url = node ? typeinfo_cast<CCString*>(node->getUserObject()) : nullptr;
+    if (!url) {
+        return;
+    }
+    geode::utils::web::openLinkInBrowser(url->getCString());
 }
 
 void ToastyMenu::onAccentColor(CCObject*) {
@@ -1320,12 +1484,13 @@ void ToastyMenu::onClose(CCObject* sender) {
     Popup::onClose(sender);
 }
 
-void ToastyMenu::onReplayMacro(CCObject* sender) {
-    auto name = macroNameFromSender(sender);
+void ToastyMenu::onReplayMacro(CCObject*) {
+    auto name = toasty::engine::selectedReplay();
     if (name.empty()) {
+        FLAlertLayer::create("Select Macro", "Pick a replay from the Macro List first", "OK")
+            ->show();
         return;
     }
-    toasty::engine::setSelectedReplay(name);
     this->onClose(nullptr);
     queueInMainThread([name = std::move(name)] { startReplayFromMenu(name); });
 }

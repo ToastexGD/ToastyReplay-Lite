@@ -173,6 +173,47 @@ namespace toasty::replay::ttrl {
         return Ok(pathFileName(target));
     }
 
+    SaveResult Storage::importFile(asp::fs::path const& source) const {
+        GEODE_UNWRAP(ensureDirectory(m_directory));
+
+        auto statusRes = asp::fs::status(source);
+        if (statusRes.isErr()) {
+            auto err = statusRes.unwrapErr();
+            if (err.getCode() == std::errc::no_such_file_or_directory) {
+                return failure(StorageError::FileNotFound);
+            }
+            return failure(StorageError::ReadFailed, err.message());
+        }
+
+        auto status = statusRes.unwrap();
+        if (status.isSymlink() || !status.isFile()) {
+            return failure(StorageError::InvalidFile);
+        }
+
+        auto readRes = utils::file::readBinary(source);
+        if (readRes.isErr()) {
+            return failure(StorageError::ReadFailed, readRes.unwrapErr());
+        }
+
+        auto bytes = std::move(readRes.unwrap());
+        if (bytes.size() > codec::MaximumFileSize) {
+            return failure(StorageError::FileTooLarge);
+        }
+
+        auto replay = codec::decode(bytes);
+        if (replay.isErr()) {
+            return failure(StorageError::InvalidReplay, {}, replay.unwrapErr());
+        }
+
+        GEODE_UNWRAP_INTO(auto target, availablePath(m_directory, pathFileName(source)));
+        auto writeRes = utils::file::writeBinarySafe(target, bytes);
+        if (writeRes.isErr()) {
+            return failure(StorageError::WriteFailed, writeRes.unwrapErr());
+        }
+
+        return Ok(pathFileName(target));
+    }
+
     LoadResult Storage::load(ZStringView fileName) const {
         GEODE_UNWRAP(ensureDirectory(m_directory));
 
