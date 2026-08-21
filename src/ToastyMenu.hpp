@@ -48,6 +48,10 @@ class ToastyMenu : public geode::Popup {
     std::string m_macroInfoName;
     CCLabelBMFont* m_macroInfoLabel = nullptr;
     CCMenuItemSpriteExtra* m_macroInfoButton = nullptr;
+    float m_macroInfoLeft = 0.f;
+    float m_macroInfoRight = 0.f;
+    float m_macroInfoRightWide = 0.f;
+    std::optional<std::filesystem::file_time_type> m_macroDirTime;
     TextInput* m_seedInput = nullptr;
     TextInput* m_speedInput = nullptr;
     CCMenuItemToggler* m_speedToggle = nullptr;
@@ -85,7 +89,8 @@ class ToastyMenu : public geode::Popup {
     void updatePages();
     void clampMainLayer();
 
-    void refreshMacroList();
+    void refreshMacroList(bool keepScroll = false);
+    void checkMacroDirectory(float dt);
     void updateMacroInfo();
     void onMacroInfo(CCObject* sender);
     void onMode(CCObject* sender);
@@ -103,7 +108,6 @@ class ToastyMenu : public geode::Popup {
     void onFrameStepperOptions(CCObject* sender);
     void onNoclipOptions(CCObject* sender);
     void onSeedInfo(CCObject* sender);
-    void onRefreshMacros(CCObject* sender);
     void onReplayMacro(CCObject* sender);
     void onRenameMacro(CCObject* sender);
     void onDeleteMacro(CCObject* sender);

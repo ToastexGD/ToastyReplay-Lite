@@ -1,5 +1,6 @@
 #include "ToastyMenu.hpp"
 #include <arc/future/Future.hpp>
+#include <asp/fs.hpp>
 #include <asp/iter.hpp>
 #include <fmt/ranges.h>
 #include <Geode/ui/ColorPickPopup.hpp>
@@ -26,15 +27,18 @@ static constexpr float HEADER_ICON = 22.f;
 static constexpr float DIVIDER_Y = 256.f;
 static constexpr float CONTENT_TOP = 236.f;
 static constexpr float CONTENT_BOTTOM = MARGIN;
+static constexpr float FOOTER_H = 30.f;
+static constexpr float FOOTER_Y = CONTENT_BOTTOM + FOOTER_H / 2.f;
+static constexpr float COLUMN_BOTTOM = CONTENT_BOTTOM + FOOTER_H + GAP;
 static constexpr float SIDE_X = 58.f;
 static constexpr float SIDE_W = 92.f;
-static constexpr float SIDE_PAD = 9.f;
 static constexpr float TAB_W = 74.f;
 static constexpr float TAB_H = 26.f;
 static constexpr float TAB_GAP = 10.f;
+static constexpr float TABS_H = TAB_H * 5.f + TAB_GAP * 4.f;
+static constexpr float SIDE_PAD = (CONTENT_TOP - COLUMN_BOTTOM - TABS_H) / 2.f;
 static constexpr float SOCIAL_ICON = 26.f;
-static constexpr float SOCIAL_Y = CONTENT_BOTTOM + SOCIAL_ICON / 2.f;
-static constexpr float SIDE_BOTTOM = SOCIAL_Y + SOCIAL_ICON / 2.f + GAP;
+static constexpr float SOCIAL_Y = FOOTER_Y;
 static constexpr float PANEL_X = 269.f;
 static constexpr float PANEL_W = 314.f;
 static constexpr float PANEL_LEFT = PANEL_X - PANEL_W / 2.f;
@@ -49,9 +53,9 @@ static constexpr float ROW_H = 26.f;
 static constexpr float ROW_PAD = 10.f;
 static constexpr float CTRL_GAP = 8.f;
 static constexpr float MACRO_ROW_H = 30.f;
-static constexpr float FOOTER_H = 30.f;
 static constexpr float FOOTER_ICON = 24.f;
-static constexpr float FOOTER_INFO_W = 140.f;
+static constexpr float FOOTER_INFO_ICON = 16.f;
+static constexpr float FOOTER_TEXT_SCALE = .32f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
 static constexpr float ROW_CONTROL_RIGHT = ROW_W - ROW_PAD;
@@ -159,6 +163,14 @@ static std::string speedText(double speed) {
         value.pop_back();
     }
     return value;
+}
+
+static std::optional<std::filesystem::file_time_type> macroDirectoryTime() {
+    auto time = asp::fs::lastWriteTime(toasty::replay::ttrl::defaultReplayDirectory());
+    if (time.isErr()) {
+        return std::nullopt;
+    }
+    return time.unwrap();
 }
 
 static std::string durationText(double seconds) {
@@ -278,12 +290,11 @@ bool ToastyMenu::init() {
         auto page = this->makePage(TabMacros).node;
         this->addPageTitle(page, "Macro List", nullptr);
 
-        this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
+        this->addPanel(page, {PANEL_X, (CONTENT_TOP + COLUMN_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - COLUMN_BOTTOM});
 
-        float footerBottom = CONTENT_BOTTOM + PANEL_PAD;
-        float footerY = footerBottom + FOOTER_H / 2.f;
+        float footerY = FOOTER_Y;
 
-        auto footer = makeBG({ROW_W, FOOTER_H}, {0, 0, 0}, 45, true);
+        auto footer = makeBG({PANEL_W, FOOTER_H}, PANEL_COLOR, 220, false);
         footer->setPosition({PANEL_X, footerY});
         page->addChild(footer);
 
@@ -293,13 +304,13 @@ bool ToastyMenu::init() {
         footerMenu->setID("macro-footer");
         page->addChild(footerMenu);
 
-        float scrollBottom = footerBottom + FOOTER_H + PANEL_PAD;
+        float scrollBottom = COLUMN_BOTTOM + PANEL_PAD;
         m_macroScroll = this->addScroll(page,
                                         TabMacros,
                                         {ROW_X, scrollBottom},
                                         {ROW_W, CONTENT_TOP - PANEL_PAD - scrollBottom});
 
-        float footerNext = ROW_X + ROW_PAD;
+        float footerNext = PANEL_LEFT + ROW_PAD;
 
         if (auto plusSpr = CCSprite::createWithSpriteFrameName("GJ_plusBtn_001.png")) {
             plusSpr->setScale(FOOTER_ICON /
@@ -311,38 +322,30 @@ bool ToastyMenu::init() {
             footerMenu->addChild(addBtn);
         }
 
-        if (auto refreshSpr = CCSprite::createWithSpriteFrameName("GJ_updateBtn_001.png")) {
-            refreshSpr->setScale(
-                FOOTER_ICON /
-                std::max(refreshSpr->getContentWidth(), refreshSpr->getContentHeight()));
-            auto refreshBtn = CCMenuItemSpriteExtra::create(
-                refreshSpr, this, menu_selector(ToastyMenu::onRefreshMacros));
-            refreshBtn->setID("refresh-macros");
-            placeLeft(refreshBtn, footerNext, footerY);
-            footerMenu->addChild(refreshBtn);
-        }
+        m_macroInfoLeft = footerNext;
 
         auto replaySpr = ButtonSprite::create("Replay", "bigFont.fnt", "GJ_button_01.png", .8f);
         replaySpr->setScale(.6f);
         auto replayBtn = CCMenuItemSpriteExtra::create(
             replaySpr, this, menu_selector(ToastyMenu::onReplayMacro));
         replayBtn->setID("replay");
-        float infoNext = placeRight(replayBtn, ROW_X + ROW_W - ROW_PAD, footerY);
+        m_macroInfoRightWide = placeRight(replayBtn, PANEL_RIGHT - ROW_PAD, footerY);
+        m_macroInfoRight = m_macroInfoRightWide;
         footerMenu->addChild(replayBtn);
 
         if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
-            infoSpr->setScale(20.f /
+            infoSpr->setScale(FOOTER_INFO_ICON /
                               std::max(infoSpr->getContentWidth(), infoSpr->getContentHeight()));
             m_macroInfoButton = CCMenuItemSpriteExtra::create(
                 infoSpr, this, menu_selector(ToastyMenu::onMacroInfo));
             m_macroInfoButton->setID("macro-info");
-            infoNext = placeRight(m_macroInfoButton, infoNext, footerY);
+            m_macroInfoRight = placeRight(m_macroInfoButton, m_macroInfoRightWide, footerY);
             footerMenu->addChild(m_macroInfoButton);
         }
 
         m_macroInfoLabel = CCLabelBMFont::create("", "bigFont.fnt");
         m_macroInfoLabel->setAnchorPoint({1.f, .5f});
-        m_macroInfoLabel->setPosition({infoNext, footerY});
+        m_macroInfoLabel->setPosition({m_macroInfoRight, footerY});
         m_macroInfoLabel->setID("macro-info-label");
         page->addChild(m_macroInfoLabel);
 
@@ -489,6 +492,7 @@ bool ToastyMenu::init() {
 
     this->updateTabs();
     this->updatePages();
+    this->schedule(schedule_selector(ToastyMenu::checkMacroDirectory), 1.f);
 
     s_instance = this;
     return true;
@@ -523,9 +527,9 @@ void ToastyMenu::addHeader() {
 }
 
 void ToastyMenu::addSidebar() {
-    float sidebarHeight = CONTENT_TOP - SIDE_BOTTOM;
+    float sidebarHeight = CONTENT_TOP - COLUMN_BOTTOM;
     auto sidebar = makeBG({SIDE_W, sidebarHeight}, PANEL_COLOR, 220, false);
-    sidebar->setPosition({SIDE_X, SIDE_BOTTOM + sidebarHeight / 2.f});
+    sidebar->setPosition({SIDE_X, COLUMN_BOTTOM + sidebarHeight / 2.f});
     m_mainLayer->addChild(sidebar);
 
     auto menu = CCMenu::create();
@@ -1188,7 +1192,7 @@ void ToastyMenu::updatePages() {
     }
 }
 
-void ToastyMenu::refreshMacroList() {
+void ToastyMenu::refreshMacroList(bool keepScroll) {
     if (!m_macroScroll) {
         return;
     }
@@ -1202,6 +1206,7 @@ void ToastyMenu::refreshMacroList() {
         return;
     }
     m_macroNames = std::move(files.unwrap());
+    m_macroDirTime = macroDirectoryTime();
     auto selected = std::find(
         m_macroNames.begin(), m_macroNames.end(), toasty::engine::selectedReplay());
     m_selectedMacro = selected == m_macroNames.end()
@@ -1212,17 +1217,39 @@ void ToastyMenu::refreshMacroList() {
     }
     m_macroRowBgs.clear();
     auto content = m_macroScroll->m_contentLayer;
+    float viewHeight = m_macroScroll->getContentHeight();
+    float scrolled = keepScroll
+                         ? content->getPositionY() - viewHeight + content->getContentHeight()
+                         : 0.f;
+
     content->removeAllChildrenWithCleanup(true);
     for (size_t index = 0; index < m_macroNames.size(); ++index) {
         content->addChild(this->makeMacroRow(m_macroNames[index], static_cast<int>(index)));
     }
     content->updateLayout();
-    m_macroScroll->scrollToTop();
+
+    if (keepScroll) {
+        float limit = std::max(0.f, content->getContentHeight() - viewHeight);
+        content->setPositionY(viewHeight - content->getContentHeight() +
+                              std::clamp(scrolled, 0.f, limit));
+    } else {
+        m_macroScroll->scrollToTop();
+    }
     for (auto [index, bg] : asp::iter::enumerate(m_macroRowBgs)) {
         bg->setColor(static_cast<int>(index) == m_selectedMacro ? m_accentColor
                                                                : ccColor3B{0, 0, 0});
     }
     this->updateMacroInfo();
+}
+
+void ToastyMenu::checkMacroDirectory(float) {
+    if (m_tab != TabMacros) {
+        return;
+    }
+    if (macroDirectoryTime() == m_macroDirTime) {
+        return;
+    }
+    this->refreshMacroList(true);
 }
 
 void ToastyMenu::updateMacroInfo() {
@@ -1236,7 +1263,9 @@ void ToastyMenu::updateMacroInfo() {
         m_macroInfoName.clear();
         m_macroInfoLabel->setString("No macro selected");
         m_macroInfoLabel->setColor({150, 150, 150});
-        m_macroInfoLabel->limitLabelWidth(FOOTER_INFO_W, .4f, .1f);
+        m_macroInfoLabel->setPositionX(m_macroInfoRightWide);
+        m_macroInfoLabel->limitLabelWidth(
+            m_macroInfoRightWide - m_macroInfoLeft, FOOTER_TEXT_SCALE, .1f);
         if (m_macroInfoButton) {
             m_macroInfoButton->setVisible(false);
         }
@@ -1271,6 +1300,9 @@ void ToastyMenu::updateMacroInfo() {
         }
     }
 
+    bool showInfo = m_macroInfo.loaded && m_macroInfoButton != nullptr;
+    float right = showInfo ? m_macroInfoRight : m_macroInfoRightWide;
+
     if (m_macroInfo.loaded) {
         m_macroInfoLabel->setString(fmt::format("{} actions", m_macroInfo.inputs).c_str());
         m_macroInfoLabel->setColor({255, 255, 255});
@@ -1278,7 +1310,8 @@ void ToastyMenu::updateMacroInfo() {
         m_macroInfoLabel->setString("Unreadable macro");
         m_macroInfoLabel->setColor({255, 130, 130});
     }
-    m_macroInfoLabel->limitLabelWidth(FOOTER_INFO_W, .4f, .1f);
+    m_macroInfoLabel->setPositionX(right);
+    m_macroInfoLabel->limitLabelWidth(right - m_macroInfoLeft, FOOTER_TEXT_SCALE, .1f);
     if (m_macroInfoButton) {
         m_macroInfoButton->setVisible(m_macroInfo.loaded);
     }
@@ -1296,7 +1329,8 @@ void ToastyMenu::onMacroInfo(CCObject*) {
         level += fmt::format(" (rev {})", m_macroInfo.levelRevision);
     }
 
-    auto text = fmt::format("<cy>Level:</c> {}\n"
+    auto text = fmt::format("<cg>{}</c>\n\n"
+                            "<cy>Level:</c> {}\n"
                             "<cy>Actions:</c> {}\n"
                             "<cy>Duration:</c> {}\n"
                             "<cy>Ticks:</c> {}\n"
@@ -1305,6 +1339,7 @@ void ToastyMenu::onMacroInfo(CCObject*) {
                             "<cy>Game Version:</c> {}\n"
                             "<cy>Seed:</c> {}\n"
                             "<cy>Frame Fixes:</c> {}",
+                            toasty::replay::ttrl::displayName(m_macroInfoName),
                             level,
                             m_macroInfo.inputs,
                             durationText(m_macroInfo.duration),
@@ -1316,10 +1351,7 @@ void ToastyMenu::onMacroInfo(CCObject*) {
                                              : std::string("Not stored"),
                             m_macroInfo.frameFixes);
 
-    FLAlertLayer::create(toasty::replay::ttrl::displayName(m_macroInfoName).c_str(),
-                         text.c_str(),
-                         "OK")
-        ->show();
+    FLAlertLayer::create("Macro Info", text.c_str(), "OK")->show();
 }
 
 void ToastyMenu::onMode(CCObject* sender) {
@@ -1471,10 +1503,6 @@ void ToastyMenu::onSeedInfo(CCObject*) {
         "Playback restores the seed stored in the replay.",
         "OK")
         ->show();
-}
-
-void ToastyMenu::onRefreshMacros(CCObject* sender) {
-    this->refreshMacroList();
 }
 
 void ToastyMenu::onSelectMacro(CCObject* sender) {
@@ -1661,7 +1689,7 @@ void ToastyMenu::onDeleteMacro(CCObject* sender) {
             }
         }
         if (menu) {
-            menu->refreshMacroList();
+            menu->refreshMacroList(true);
         }
     });
 }
@@ -1804,7 +1832,7 @@ void RenameMacroPopup::onSave(CCObject* sender) {
         toasty::engine::setSelectedReplay(renamed);
     }
     if (auto menu = m_menu.lock()) {
-        menu->refreshMacroList();
+        menu->refreshMacroList(true);
     }
     this->onClose(sender);
 }
