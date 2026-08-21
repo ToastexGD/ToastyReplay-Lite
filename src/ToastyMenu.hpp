@@ -21,6 +21,19 @@ class ToastyMenu : public geode::Popup {
         CCNode* node = nullptr;
         CCMenu* menu = nullptr;
     };
+    struct MacroInfo {
+        bool loaded = false;
+        size_t inputs = 0;
+        size_t frameFixes = 0;
+        uint64_t tickCount = 0;
+        double tps = 0.0;
+        double duration = 0.0;
+        uint32_t gameVersion = 0;
+        uint64_t levelId = 0;
+        uint64_t levelRevision = 0;
+        bool platformer = false;
+        std::optional<uint64_t> seed;
+    };
     int m_tab = TabMain;
     NineSlice* m_modeBgs[3] = {};
     CCLabelBMFont* m_modeLabels[3] = {};
@@ -31,6 +44,10 @@ class ToastyMenu : public geode::Popup {
     std::vector<std::string> m_macroNames;
     std::vector<NineSlice*> m_macroRowBgs;
     int m_selectedMacro = -1;
+    MacroInfo m_macroInfo;
+    std::string m_macroInfoName;
+    CCLabelBMFont* m_macroInfoLabel = nullptr;
+    CCMenuItemSpriteExtra* m_macroInfoButton = nullptr;
     TextInput* m_seedInput = nullptr;
     TextInput* m_speedInput = nullptr;
     CCMenuItemToggler* m_speedToggle = nullptr;
@@ -69,6 +86,8 @@ class ToastyMenu : public geode::Popup {
     void clampMainLayer();
 
     void refreshMacroList();
+    void updateMacroInfo();
+    void onMacroInfo(CCObject* sender);
     void onMode(CCObject* sender);
     void onTab(CCObject* sender);
     void onSelectMacro(CCObject* sender);

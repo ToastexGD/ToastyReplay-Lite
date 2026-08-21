@@ -51,6 +51,7 @@ static constexpr float CTRL_GAP = 8.f;
 static constexpr float MACRO_ROW_H = 30.f;
 static constexpr float FOOTER_H = 30.f;
 static constexpr float FOOTER_ICON = 24.f;
+static constexpr float FOOTER_INFO_W = 140.f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
 static constexpr float ROW_CONTROL_RIGHT = ROW_W - ROW_PAD;
@@ -158,6 +159,22 @@ static std::string speedText(double speed) {
         value.pop_back();
     }
     return value;
+}
+
+static std::string durationText(double seconds) {
+    if (seconds <= 0.0) {
+        return "0:00.00";
+    }
+    auto total = static_cast<uint64_t>(seconds);
+    auto hundredths = static_cast<int>((seconds - static_cast<double>(total)) * 100.0);
+    return fmt::format("{}:{:02}.{:02}", total / 60, total % 60, hundredths);
+}
+
+static std::string gameVersionText(uint32_t version) {
+    if (version == 0) {
+        return "Unknown";
+    }
+    return fmt::format("{}.{:04}", version / 10000, version % 10000);
 }
 
 static std::string modVersion() {
@@ -310,8 +327,24 @@ bool ToastyMenu::init() {
         auto replayBtn = CCMenuItemSpriteExtra::create(
             replaySpr, this, menu_selector(ToastyMenu::onReplayMacro));
         replayBtn->setID("replay");
-        placeRight(replayBtn, ROW_X + ROW_W - ROW_PAD, footerY);
+        float infoNext = placeRight(replayBtn, ROW_X + ROW_W - ROW_PAD, footerY);
         footerMenu->addChild(replayBtn);
+
+        if (auto infoSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png")) {
+            infoSpr->setScale(20.f /
+                              std::max(infoSpr->getContentWidth(), infoSpr->getContentHeight()));
+            m_macroInfoButton = CCMenuItemSpriteExtra::create(
+                infoSpr, this, menu_selector(ToastyMenu::onMacroInfo));
+            m_macroInfoButton->setID("macro-info");
+            infoNext = placeRight(m_macroInfoButton, infoNext, footerY);
+            footerMenu->addChild(m_macroInfoButton);
+        }
+
+        m_macroInfoLabel = CCLabelBMFont::create("", "bigFont.fnt");
+        m_macroInfoLabel->setAnchorPoint({1.f, .5f});
+        m_macroInfoLabel->setPosition({infoNext, footerY});
+        m_macroInfoLabel->setID("macro-info-label");
+        page->addChild(m_macroInfoLabel);
 
         this->refreshMacroList();
     }
@@ -1189,6 +1222,104 @@ void ToastyMenu::refreshMacroList() {
         bg->setColor(static_cast<int>(index) == m_selectedMacro ? m_accentColor
                                                                : ccColor3B{0, 0, 0});
     }
+    this->updateMacroInfo();
+}
+
+void ToastyMenu::updateMacroInfo() {
+    if (!m_macroInfoLabel) {
+        return;
+    }
+
+    auto name = toasty::engine::selectedReplay();
+    if (name.empty()) {
+        m_macroInfo = {};
+        m_macroInfoName.clear();
+        m_macroInfoLabel->setString("No macro selected");
+        m_macroInfoLabel->setColor({150, 150, 150});
+        m_macroInfoLabel->limitLabelWidth(FOOTER_INFO_W, .4f, .1f);
+        if (m_macroInfoButton) {
+            m_macroInfoButton->setVisible(false);
+        }
+        return;
+    }
+
+    if (name != m_macroInfoName) {
+        m_macroInfoName = name;
+        m_macroInfo = {};
+
+        toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
+        auto loaded = storage.load(name);
+        if (loaded.isOk()) {
+            auto replay = std::move(loaded.unwrap());
+            auto rate = replay.tps.normalized();
+
+            m_macroInfo.loaded = true;
+            m_macroInfo.inputs = replay.inputs.size();
+            m_macroInfo.frameFixes = replay.frameFixes.size();
+            m_macroInfo.tickCount = replay.tickCount;
+            m_macroInfo.tps = rate ? static_cast<double>(rate->numerator) /
+                                         static_cast<double>(rate->denominator)
+                                   : 0.0;
+            m_macroInfo.duration =
+                m_macroInfo.tps > 0.0 ? static_cast<double>(replay.tickCount) / m_macroInfo.tps
+                                      : 0.0;
+            m_macroInfo.gameVersion = replay.gameVersion;
+            m_macroInfo.levelId = replay.levelId;
+            m_macroInfo.levelRevision = replay.levelRevision;
+            m_macroInfo.platformer = replay.mode == toasty::replay::PlayMode::Platformer;
+            m_macroInfo.seed = replay.seed;
+        }
+    }
+
+    if (m_macroInfo.loaded) {
+        m_macroInfoLabel->setString(fmt::format("{} actions", m_macroInfo.inputs).c_str());
+        m_macroInfoLabel->setColor({255, 255, 255});
+    } else {
+        m_macroInfoLabel->setString("Unreadable macro");
+        m_macroInfoLabel->setColor({255, 130, 130});
+    }
+    m_macroInfoLabel->limitLabelWidth(FOOTER_INFO_W, .4f, .1f);
+    if (m_macroInfoButton) {
+        m_macroInfoButton->setVisible(m_macroInfo.loaded);
+    }
+}
+
+void ToastyMenu::onMacroInfo(CCObject*) {
+    if (!m_macroInfo.loaded) {
+        return;
+    }
+
+    auto level = m_macroInfo.levelId == 0
+                     ? std::string("Local level")
+                     : fmt::format("#{}", m_macroInfo.levelId);
+    if (m_macroInfo.levelRevision != 0) {
+        level += fmt::format(" (rev {})", m_macroInfo.levelRevision);
+    }
+
+    auto text = fmt::format("<cy>Level:</c> {}\n"
+                            "<cy>Actions:</c> {}\n"
+                            "<cy>Duration:</c> {}\n"
+                            "<cy>Ticks:</c> {}\n"
+                            "<cy>TPS:</c> {}\n"
+                            "<cy>Mode:</c> {}\n"
+                            "<cy>Game Version:</c> {}\n"
+                            "<cy>Seed:</c> {}\n"
+                            "<cy>Frame Fixes:</c> {}",
+                            level,
+                            m_macroInfo.inputs,
+                            durationText(m_macroInfo.duration),
+                            m_macroInfo.tickCount,
+                            speedText(m_macroInfo.tps),
+                            m_macroInfo.platformer ? "Platformer" : "Classic",
+                            gameVersionText(m_macroInfo.gameVersion),
+                            m_macroInfo.seed ? fmt::format("{}", *m_macroInfo.seed)
+                                             : std::string("Not stored"),
+                            m_macroInfo.frameFixes);
+
+    FLAlertLayer::create(toasty::replay::ttrl::displayName(m_macroInfoName).c_str(),
+                         text.c_str(),
+                         "OK")
+        ->show();
 }
 
 void ToastyMenu::onMode(CCObject* sender) {
@@ -1357,6 +1488,7 @@ void ToastyMenu::onSelectMacro(CCObject* sender) {
     for (auto [i, bg] : asp::iter::enumerate(m_macroRowBgs)) {
         bg->setColor(i == index ? m_accentColor : ccColor3B{0, 0, 0});
     }
+    this->updateMacroInfo();
 }
 
 void ToastyMenu::finishAddMacroFile(std::optional<std::filesystem::path> picked) {
