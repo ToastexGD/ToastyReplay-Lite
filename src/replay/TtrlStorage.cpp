@@ -21,15 +21,32 @@ namespace toasty::replay::ttrl {
         return Err(StorageFailure{error, std::move(detail), codec});
     }
 
+    static char asciiLower(char value) {
+        auto byte = static_cast<unsigned char>(value);
+        if (byte >= 'A' && byte <= 'Z')
+            return static_cast<char>(byte - 'A' + 'a');
+        return static_cast<char>(byte);
+    }
+
     static bool endsWithTtrl(ZStringView value) {
         auto view = value.view();
         if (view.size() < 5)
             return false;
-        return utils::string::equalsIgnoreCase(view.substr(view.size() - 5), ".ttrl");
+
+        constexpr std::string_view extension = ".ttrl";
+        auto suffix = view.substr(view.size() - extension.size());
+        for (size_t index = 0; index < extension.size(); ++index) {
+            if (asciiLower(suffix[index]) != extension[index])
+                return false;
+        }
+        return true;
     }
 
     static bool reservedName(ZStringView value) {
-        auto lower = utils::string::toLower(std::string(value.view()));
+        std::string lower(value.view());
+        for (auto& character : lower) {
+            character = asciiLower(character);
+        }
         auto device = ZStringView(lower).view().substr(0, lower.find('.'));
 
         if (device == "con" || device == "prn" || device == "aux" || device == "nul" ||
