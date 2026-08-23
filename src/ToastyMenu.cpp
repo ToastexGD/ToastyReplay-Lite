@@ -1671,27 +1671,39 @@ void ToastyMenu::onDeleteMacro(CCObject* sender) {
         return;
     }
     WeakRef<ToastyMenu> weak(this);
-    queueInMainThread([weak = std::move(weak), name = std::move(name)] {
-        toasty::replay::ttrl::Storage storage(toasty::replay::ttrl::defaultReplayDirectory());
-        auto result = storage.remove(name);
-        auto menu = weak.lock();
-        if (result.isErr()) {
-            FLAlertLayer::create("Delete Failed",
-                                 toasty::replay::ttrl::describe(result.unwrapErr()),
-                                 "OK")
-                ->show();
-            return;
-        }
-        if (toasty::engine::selectedReplay() == name) {
-            toasty::engine::setSelectedReplay({});
-            if (toasty::engine::playing()) {
-                toasty::engine::stopPlayback();
+    createQuickPopup(
+        "Delete Macro",
+        fmt::format("Delete <cy>{}</c>?\nThis cannot be undone.",
+                    toasty::replay::ttrl::displayName(name)),
+        "Cancel",
+        "Delete",
+        [weak, name](auto, bool confirmed) {
+            if (!confirmed) {
+                return;
             }
-        }
-        if (menu) {
-            menu->refreshMacroList(true);
-        }
-    });
+            queueInMainThread([weak, name] {
+                toasty::replay::ttrl::Storage storage(
+                    toasty::replay::ttrl::defaultReplayDirectory());
+                auto result = storage.remove(name);
+                auto menu = weak.lock();
+                if (result.isErr()) {
+                    FLAlertLayer::create("Delete Failed",
+                                         toasty::replay::ttrl::describe(result.unwrapErr()),
+                                         "OK")
+                        ->show();
+                    return;
+                }
+                if (toasty::engine::selectedReplay() == name) {
+                    toasty::engine::setSelectedReplay({});
+                    if (toasty::engine::playing()) {
+                        toasty::engine::stopPlayback();
+                    }
+                }
+                if (menu) {
+                    menu->refreshMacroList(true);
+                }
+            });
+        });
 }
 
 OptionsPopup* OptionsPopup::create(std::string title, std::vector<Option> options) {
