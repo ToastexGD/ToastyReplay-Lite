@@ -69,15 +69,32 @@ namespace {
         auto has = [&](toasty::replay::PlayerState bit) {
             return (fix.state & static_cast<uint16_t>(bit)) != 0;
         };
-        player->toggleFlyMode(has(toasty::replay::PlayerState::Ship), true);
-        player->toggleBirdMode(has(toasty::replay::PlayerState::Bird), true);
-        player->toggleRollMode(has(toasty::replay::PlayerState::Ball), true);
-        player->toggleDartMode(has(toasty::replay::PlayerState::Dart), true);
-        player->toggleRobotMode(has(toasty::replay::PlayerState::Robot), true);
-        player->toggleSpiderMode(has(toasty::replay::PlayerState::Spider), true);
-        player->toggleSwingMode(has(toasty::replay::PlayerState::Swing), true);
+        if (player->m_isShip != has(toasty::replay::PlayerState::Ship)) {
+            player->toggleFlyMode(has(toasty::replay::PlayerState::Ship), true);
+        }
+        if (player->m_isBird != has(toasty::replay::PlayerState::Bird)) {
+            player->toggleBirdMode(has(toasty::replay::PlayerState::Bird), true);
+        }
+        if (player->m_isBall != has(toasty::replay::PlayerState::Ball)) {
+            player->toggleRollMode(has(toasty::replay::PlayerState::Ball), true);
+        }
+        if (player->m_isDart != has(toasty::replay::PlayerState::Dart)) {
+            player->toggleDartMode(has(toasty::replay::PlayerState::Dart), true);
+        }
+        if (player->m_isRobot != has(toasty::replay::PlayerState::Robot)) {
+            player->toggleRobotMode(has(toasty::replay::PlayerState::Robot), true);
+        }
+        if (player->m_isSpider != has(toasty::replay::PlayerState::Spider)) {
+            player->toggleSpiderMode(has(toasty::replay::PlayerState::Spider), true);
+        }
+        if (player->m_isSwing != has(toasty::replay::PlayerState::Swing)) {
+            player->toggleSwingMode(has(toasty::replay::PlayerState::Swing), true);
+        }
 
-        player->flipGravity(has(toasty::replay::PlayerState::UpsideDown), true);
+        auto upsideDown = has(toasty::replay::PlayerState::UpsideDown);
+        if (player->m_isUpsideDown != upsideDown) {
+            player->flipGravity(upsideDown, true);
+        }
         player->m_isSideways = has(toasty::replay::PlayerState::Sideways);
         player->m_vehicleSize = fix.vehicleSize;
         player->m_playerSpeed = fix.playerSpeed;
