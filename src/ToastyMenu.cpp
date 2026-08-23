@@ -492,7 +492,8 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(
             makeTextRow("HUGE THANKS to Peony, and developers of Silicate, and to Chag (owner of "
                         "TCBot) for having amazing reference points, and understanding.\n\n"
-                        "Inspired by xdBot and zBot, go check them out!",
+                        "Inspired by xdBot and zBot, go check them out!\n\n"
+                        "Ko-fi icon by dank_meme (Globed).",
                         .55f));
 
         scroll->m_contentLayer->updateLayout();
