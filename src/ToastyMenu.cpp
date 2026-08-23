@@ -1366,7 +1366,8 @@ void ToastyMenu::onMacroInfo(CCObject*) {
                                              : std::string("Not stored"),
                             m_macroInfo.frameFixes);
 
-    FLAlertLayer::create("Macro Info", text.c_str(), "OK")->show();
+    FLAlertLayer::create(nullptr, "Macro Info", text, "OK", nullptr, 340.f, true, 180.f, .7f)
+        ->show();
 }
 
 void ToastyMenu::onMode(CCObject* sender) {

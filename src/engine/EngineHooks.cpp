@@ -34,10 +34,17 @@ namespace {
     }
 
     void rewind(Session& session) {
-        session.tick = 0;
-        session.nextInput = 0;
-        session.nextFix = 0;
-        session.heldInputs.fill(false);
+        auto seeking = session.mode == Mode::Play;
+        session.tick = seeking ? session.playbackSeekTick : 0;
+        session.nextInput = seeking ? session.playbackSeekInput : 0;
+        session.nextFix = seeking ? session.playbackSeekFix : 0;
+        if (seeking) {
+            session.heldInputs = session.playbackSeekHeld;
+            session.pendingHeld = true;
+        } else {
+            session.heldInputs.fill(false);
+        }
+        session.playbackHold = session.playbackHoldArm;
         if (session.mode == Mode::Record) {
             session.recording.inputs.clear();
             session.recording.frameFixes.clear();
@@ -54,17 +61,63 @@ namespace {
         player->m_yVelocity = fix.verticalVelocity;
     }
 
+    void applyFixState(PlayLayer* layer, FrameFix const& fix) {
+        auto player = fix.player == InputPlayer::Player2 ? layer->m_player2 : layer->m_player1;
+        if (!player) {
+            return;
+        }
+        auto has = [&](toasty::replay::PlayerState bit) {
+            return (fix.state & static_cast<uint16_t>(bit)) != 0;
+        };
+        player->toggleFlyMode(has(toasty::replay::PlayerState::Ship), true);
+        player->toggleBirdMode(has(toasty::replay::PlayerState::Bird), true);
+        player->toggleRollMode(has(toasty::replay::PlayerState::Ball), true);
+        player->toggleDartMode(has(toasty::replay::PlayerState::Dart), true);
+        player->toggleRobotMode(has(toasty::replay::PlayerState::Robot), true);
+        player->toggleSpiderMode(has(toasty::replay::PlayerState::Spider), true);
+        player->toggleSwingMode(has(toasty::replay::PlayerState::Swing), true);
+
+        player->flipGravity(has(toasty::replay::PlayerState::UpsideDown), true);
+        player->m_isSideways = has(toasty::replay::PlayerState::Sideways);
+        player->m_vehicleSize = fix.vehicleSize;
+        player->m_playerSpeed = fix.playerSpeed;
+        player->m_gravityMod = fix.gravityMod;
+#if !defined(GEODE_IS_IOS)
+        player->updatePlayerScale();
+#endif
+    }
+
     void captureFix(Session& session, PlayerObject* player, InputPlayer inputPlayer) {
         if (!player || session.recording.frameFixes.size() >=
                            toasty::replay::ttrl::codec::MaximumFrameFixes) {
             return;
         }
+        uint16_t state = 0;
+        auto set = [&](bool on, toasty::replay::PlayerState bit) {
+            if (on) {
+                state |= static_cast<uint16_t>(bit);
+            }
+        };
+        set(player->m_isShip, toasty::replay::PlayerState::Ship);
+        set(player->m_isBird, toasty::replay::PlayerState::Bird);
+        set(player->m_isBall, toasty::replay::PlayerState::Ball);
+        set(player->m_isDart, toasty::replay::PlayerState::Dart);
+        set(player->m_isRobot, toasty::replay::PlayerState::Robot);
+        set(player->m_isSpider, toasty::replay::PlayerState::Spider);
+        set(player->m_isSwing, toasty::replay::PlayerState::Swing);
+        set(player->m_isUpsideDown, toasty::replay::PlayerState::UpsideDown);
+        set(player->m_isSideways, toasty::replay::PlayerState::Sideways);
+
         session.recording.frameFixes.push_back({.afterTick = session.tick,
                                                 .player = inputPlayer,
                                                 .x = player->getPositionX(),
                                                 .y = player->getPositionY(),
                                                 .rotation = player->getRotation(),
-                                                .verticalVelocity = player->m_yVelocity});
+                                                .verticalVelocity = player->m_yVelocity,
+                                                .state = state,
+                                                .vehicleSize = player->m_vehicleSize,
+                                                .playerSpeed = player->m_playerSpeed,
+                                                .gravityMod = player->m_gravityMod});
     }
 
     void applySessionSeed(Session const& session, GJBaseGameLayer* layer) {
@@ -110,9 +163,46 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         return session;
     }
 
+    bool playbackHeld(Session* session, PlayLayer* layer) {
+        if (!session->playbackHold) {
+            return false;
+        }
+        if (!layer || !layer->m_player1) {
+            return true;
+        }
+        if (layer->m_player1->getPositionX() < *session->playbackHold) {
+            return true;
+        }
+        session->playbackHold.reset();
+        return false;
+    }
+
     void feedPlaybackInputs(Session* session) {
         if (session->mode != Mode::Play || !session->playback) {
             return;
+        }
+        if (this->playbackHeld(session, PlayLayer::get())) {
+            return;
+        }
+        if (session->pendingHeld) {
+            session->pendingHeld = false;
+            auto& seekReplay = *session->playback;
+            if (session->playbackSeekTick != 0 &&
+                session->nextFix < seekReplay.frameFixes.size()) {
+                if (auto layer = PlayLayer::get()) {
+                    auto const& fix = seekReplay.frameFixes[session->nextFix];
+                    applyFixState(layer, fix);
+                    applyFix(layer, fix);
+                }
+            }
+            for (size_t index = 0; index < session->heldInputs.size(); ++index) {
+                if (!session->heldInputs[index]) {
+                    continue;
+                }
+                session->acceptingPlaybackInput = true;
+                this->handleButton(true, static_cast<int>(index % 3) + 1, index < 3);
+                session->acceptingPlaybackInput = false;
+            }
         }
         auto& replay = *session->playback;
         while (session->nextInput < replay.inputs.size() &&
@@ -129,6 +219,9 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
     void closeTick(Session* session, PlayLayer* layer) {
         if (session->mode == Mode::Play && session->playback) {
+            if (session->playbackHold) {
+                return;
+            }
             auto& replay = *session->playback;
             if (s_frameFixes) {
                 while (session->nextFix < replay.frameFixes.size() &&
@@ -162,6 +255,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         }
 
         session->processingTick = true;
+        toasty::engine::realignPlayback(PlayLayer::get());
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         this->closeTick(session, PlayLayer::get());
@@ -182,6 +276,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         }
 
         session->processingTick = true;
+        toasty::engine::realignPlayback(PlayLayer::get());
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
         this->closeTick(session, PlayLayer::get());

@@ -35,6 +35,18 @@ namespace toasty::replay {
         bool operator==(InputEvent const&) const = default;
     };
 
+    enum class PlayerState : uint16_t {
+        Ship = 1 << 0,
+        Bird = 1 << 1,
+        Ball = 1 << 2,
+        Dart = 1 << 3,
+        Robot = 1 << 4,
+        Spider = 1 << 5,
+        Swing = 1 << 6,
+        UpsideDown = 1 << 7,
+        Sideways = 1 << 8
+    };
+
     struct FrameFix {
         uint64_t afterTick = 0;
         InputPlayer player = InputPlayer::Player1;
@@ -42,6 +54,10 @@ namespace toasty::replay {
         float y = 0.f;
         float rotation = 0.f;
         double verticalVelocity = 0.0;
+        uint16_t state = 0;
+        float vehicleSize = 1.f;
+        float playerSpeed = 1.f;
+        float gravityMod = 1.f;
 
         bool operator==(FrameFix const&) const = default;
     };

@@ -29,7 +29,8 @@ namespace toasty::replay::ttrl::codec {
     constexpr uint8_t KnownFlags =
         FrameFixFlag | InputChannelsFlag | PlatformerFlag | SeedFlag | StartPosFlag;
     constexpr uint8_t LegacyFrameFixSchema = 1;
-    constexpr uint8_t FrameFixSchema = 2;
+    constexpr uint8_t PositionFrameFixSchema = 2;
+    constexpr uint8_t FrameFixSchema = 3;
     constexpr size_t MinimumFileSize = 25;
     constexpr size_t MaximumFrameFixSize = MaximumFileSize - MaximumInputSize;
     constexpr size_t MinimumFrameFixRecordSize = 21;
@@ -207,7 +208,7 @@ namespace toasty::replay::ttrl::codec {
         GEODE_UNWRAP_INTO(auto value, reader.readVarint());
         auto player = InputPlayer::Player1;
         auto delta = value;
-        if (schema == FrameFixSchema) {
+        if (schema != LegacyFrameFixSchema) {
             player = (value & 1) != 0 ? InputPlayer::Player2 : InputPlayer::Player1;
             delta = value >> 1;
         }
@@ -222,12 +223,35 @@ namespace toasty::replay::ttrl::codec {
             return failure(CodecError::InvalidFrameFix, offset);
         }
 
+        uint16_t state = 0;
+        float vehicleSize = 1.f;
+        float playerSpeed = 1.f;
+        float gravityMod = 1.f;
+        if (schema == FrameFixSchema) {
+            GEODE_UNWRAP_INTO(auto stateValue, reader.readVarint());
+            if (stateValue > std::numeric_limits<uint16_t>::max()) {
+                return failure(CodecError::InvalidFrameFix, offset);
+            }
+            state = static_cast<uint16_t>(stateValue);
+            GEODE_UNWRAP_INTO(vehicleSize, reader.readFloat());
+            GEODE_UNWRAP_INTO(playerSpeed, reader.readFloat());
+            GEODE_UNWRAP_INTO(gravityMod, reader.readFloat());
+            if (!std::isfinite(vehicleSize) || !std::isfinite(playerSpeed) ||
+                !std::isfinite(gravityMod)) {
+                return failure(CodecError::InvalidFrameFix, offset);
+            }
+        }
+
         return Ok(FrameFix{.afterTick = tick,
                            .player = player,
                            .x = x,
                            .y = y,
                            .rotation = rotation,
-                           .verticalVelocity = verticalVelocity});
+                           .verticalVelocity = verticalVelocity,
+                           .state = state,
+                           .vehicleSize = vehicleSize,
+                           .playerSpeed = playerSpeed,
+                           .gravityMod = gravityMod});
     }
 
     Result<TpsRate, CodecFailure> validate(Replay const& replay, bool inputChannels) {
@@ -319,7 +343,7 @@ namespace toasty::replay::ttrl::codec {
             previousTick = 0;
             for (auto const& fixRef : asp::iter::from(replay.frameFixes)) {
                 FrameFix const& fix = fixRef;
-                if (frameFixBytes.size() > MaximumFrameFixSize - 30) {
+                if (frameFixBytes.size() > MaximumFrameFixSize - 60) {
                     return failure(CodecError::FileTooLarge, frameFixBytes.size());
                 }
                 auto delta = fix.afterTick - previousTick;
@@ -329,6 +353,10 @@ namespace toasty::replay::ttrl::codec {
                 appendFloat(frameFixBytes, fix.y);
                 appendFloat(frameFixBytes, fix.rotation);
                 appendDouble(frameFixBytes, fix.verticalVelocity);
+                appendVarint(frameFixBytes, fix.state);
+                appendFloat(frameFixBytes, fix.vehicleSize);
+                appendFloat(frameFixBytes, fix.playerSpeed);
+                appendFloat(frameFixBytes, fix.gravityMod);
                 previousTick = fix.afterTick;
             }
         }
@@ -498,7 +526,8 @@ namespace toasty::replay::ttrl::codec {
 
         if ((flags & FrameFixFlag) != 0) {
             GEODE_UNWRAP_INTO(auto schema, reader.readByte());
-            if (schema != LegacyFrameFixSchema && schema != FrameFixSchema) {
+            if (schema != LegacyFrameFixSchema && schema != PositionFrameFixSchema &&
+                schema != FrameFixSchema) {
                 return failure(CodecError::UnsupportedFrameFixSchema, reader.position() - 1);
             }
 

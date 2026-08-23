@@ -31,6 +31,14 @@ namespace toasty::engine {
         bool processingTick = false;
         bool acceptingPlaybackInput = false;
         bool resetting = false;
+        std::optional<float> playbackHold;
+        std::optional<float> playbackHoldArm;
+        uint64_t playbackSeekTick = 0;
+        size_t playbackSeekInput = 0;
+        size_t playbackSeekFix = 0;
+        std::array<bool, 6> playbackSeekHeld = {};
+        float playbackAlignedStart = 0.f;
+        bool pendingHeld = false;
         bool previousTestMode = false;
         bool changedTestMode = false;
         bool tpsOverride = false;
@@ -49,6 +57,7 @@ namespace toasty::engine {
     bool loadReplayAndBegin(std::string name);
     void togglePlayback();
     void stopPlayback();
+    bool realignPlayback(PlayLayer* layer);
 
     void setSelectedReplay(std::string name);
     std::string const& selectedReplay();

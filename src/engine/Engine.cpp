@@ -23,10 +23,16 @@ namespace toasty::engine {
         std::string s_selectedReplay;
 
         void resetAttempt(Session& session) {
-            session.tick = 0;
-            session.nextInput = 0;
-            session.nextFix = 0;
-            session.heldInputs.fill(false);
+            auto seeking = session.mode == Mode::Play;
+            session.tick = seeking ? session.playbackSeekTick : 0;
+            session.nextInput = seeking ? session.playbackSeekInput : 0;
+            session.nextFix = seeking ? session.playbackSeekFix : 0;
+            if (seeking) {
+                session.heldInputs = session.playbackSeekHeld;
+                session.pendingHeld = true;
+            } else {
+                session.heldInputs.fill(false);
+            }
             if (session.mode == Mode::Record) {
                 session.recording.inputs.clear();
                 session.recording.frameFixes.clear();
@@ -83,11 +89,46 @@ namespace toasty::engine {
             return std::nullopt;
         }
 
-        bool sameStartPos(std::optional<float> a, std::optional<float> b) {
-            if (a.has_value() != b.has_value()) {
-                return false;
+        bool alignPlayback(Session& session, Replay const& replay, float currentStart) {
+            auto recordedStart = replay.startPos.value_or(0.f);
+            session.playbackHoldArm.reset();
+            session.playbackSeekTick = 0;
+            session.playbackSeekInput = 0;
+            session.playbackSeekFix = 0;
+            session.playbackSeekHeld = {};
+            session.playbackAlignedStart = currentStart;
+
+            if (currentStart > recordedStart + 1.f) {
+                auto fix = std::find_if(replay.frameFixes.begin(),
+                                        replay.frameFixes.end(),
+                                        [&](replay::FrameFix const& value) {
+                                            return value.player == replay::InputPlayer::Player1 &&
+                                                   value.x >= currentStart;
+                                        });
+                if (fix == replay.frameFixes.end()) {
+                    return false;
+                }
+                session.playbackSeekTick = fix->afterTick;
+                session.playbackSeekFix =
+                    static_cast<size_t>(std::distance(replay.frameFixes.begin(), fix));
+                session.playbackSeekInput = static_cast<size_t>(std::distance(
+                    replay.inputs.begin(),
+                    std::lower_bound(replay.inputs.begin(),
+                                     replay.inputs.end(),
+                                     session.playbackSeekTick,
+                                     [](replay::InputEvent const& input, uint64_t tick) {
+                                         return input.beforeTick < tick;
+                                     })));
+                for (size_t index = 0; index < session.playbackSeekInput; ++index) {
+                    auto const& input = replay.inputs[index];
+                    auto offset = input.player == replay::InputPlayer::Player2 ? 3u : 0u;
+                    session.playbackSeekHeld[offset + static_cast<size_t>(input.button) - 1] =
+                        input.pressed;
+                }
+            } else if (currentStart < recordedStart - 1.f) {
+                session.playbackHoldArm = recordedStart;
             }
-            return !a || std::fabs(*a - *b) < 1.f;
+            return true;
         }
 
         std::optional<std::string> validateReplay(Session const& session, Replay& replay) {
@@ -116,6 +157,22 @@ namespace toasty::engine {
             return std::nullopt;
         }
     } // namespace
+
+    bool realignPlayback(PlayLayer* layer) {
+        auto session = activeSession();
+        if (!layer || !session || session->mode != Mode::Play || !session->playback) {
+            return false;
+        }
+        auto currentStart = startPosOf(layer).value_or(0.f);
+        if (std::fabs(currentStart - session->playbackAlignedStart) < 1.f) {
+            return false;
+        }
+        if (!alignPlayback(*session, *session->playback, currentStart)) {
+            return false;
+        }
+        resetAttempt(*session);
+        return true;
+    }
 
     Session::~Session() {
         if (tpsOverride) {
@@ -152,6 +209,15 @@ namespace toasty::engine {
         toasty::compat::beginSession();
         session->mode = Mode::Off;
         session->recording = {};
+        auto startPos = startPosOf(layer);
+        if (startPos && !Mod::get()->getSettingValue<bool>("frame-fixes")) {
+            FLAlertLayer::create(
+                "Frame Fixes Required",
+                "Recording from a start position needs Frame Fixes enabled in Settings",
+                "OK")
+                ->show();
+            return false;
+        }
         if (toasty::seed::enabled()) {
             session->recording.seed = toasty::seed::value();
             toasty::seed::apply(layer, *session->recording.seed);
@@ -160,7 +226,7 @@ namespace toasty::engine {
         if (session->recording.seed) {
             toasty::seed::apply(layer, *session->recording.seed);
         }
-        session->recording.startPos = startPosOf(layer);
+        session->recording.startPos = startPos ? startPos : startPosOf(layer);
         session->recordingRate = toasty::tps::effectiveRate();
         session->mode = Mode::Record;
         resetAttempt(*session);
@@ -226,12 +292,16 @@ namespace toasty::engine {
             FLAlertLayer::create("Replay Rejected", *error, "OK")->show();
             return false;
         }
-        if (!sameStartPos(replay.startPos, startPosOf(layer))) {
-            auto message = replay.startPos
-                               ? "This replay was recorded from a different start position"
-                               : "This replay was recorded from the level start";
-            log::error("Replay rejected: {}", message);
-            FLAlertLayer::create("Replay Rejected", message, "OK")->show();
+        auto recordedStart = replay.startPos.value_or(0.f);
+        auto currentStart = startPosOf(layer).value_or(0.f);
+        log::info("Replay start {}, level start {}", recordedStart, currentStart);
+
+        if (!alignPlayback(*session, replay, currentStart)) {
+            FLAlertLayer::create("Frame Fixes Required",
+                                 "Playing from a later start position needs a macro recorded "
+                                 "with Frame Fixes enabled",
+                                 "OK")
+                ->show();
             return false;
         }
         auto replayRate = static_cast<int64_t>(replay.tps.numerator);
