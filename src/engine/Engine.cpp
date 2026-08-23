@@ -231,7 +231,7 @@ namespace toasty::engine {
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }
-        layer->resetLevel();
+        layer->resetLevelFromStart();
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }

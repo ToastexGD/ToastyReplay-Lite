@@ -51,6 +51,7 @@ static constexpr float ROW_X = 116.f;
 static constexpr float ROW_W = 306.f;
 static constexpr float ROW_H = 26.f;
 static constexpr float ROW_PAD = 10.f;
+static constexpr float SWATCH_SIZE = 20.f;
 static constexpr float CTRL_GAP = 8.f;
 static constexpr float MACRO_ROW_H = 30.f;
 static constexpr float FOOTER_ICON = 24.f;
@@ -59,6 +60,7 @@ static constexpr float FOOTER_TEXT_SCALE = .32f;
 static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
 static constexpr float ROW_CONTROL_RIGHT = ROW_W - ROW_PAD;
+static constexpr float CONTROL_CENTER = ROW_CONTROL_RIGHT - SWATCH_SIZE / 2.f;
 
 static void
 moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
@@ -83,6 +85,11 @@ static float placeRight(CCNode* node, float right, float y) {
     auto width = node->getScaledContentWidth();
     node->setPosition({right - width / 2.f, y});
     return right - width - CTRL_GAP;
+}
+
+static float placeCenter(CCNode* node, float center, float y) {
+    node->setPosition({center, y});
+    return center - node->getScaledContentWidth() / 2.f - CTRL_GAP;
 }
 
 static float placeLeft(CCNode* node, float left, float y) {
@@ -383,12 +390,11 @@ bool ToastyMenu::init() {
         auto accentRow = this->makeRow("Accent Color", ROW_H, 95.f);
         accentRow.node->setID("accent-color");
 
-        m_accentSwatch = makeBG({42.f, 18.f}, m_accentColor, 255, true);
+        m_accentSwatch = makeBG({SWATCH_SIZE, SWATCH_SIZE}, m_accentColor, 255, true);
         auto accentButton = CCMenuItemSpriteExtra::create(
             m_accentSwatch, this, menu_selector(ToastyMenu::onAccentColor));
         accentButton->setID("picker");
-        accentButton->setPosition(
-            {ROW_CONTROL_RIGHT - accentButton->getScaledContentWidth() / 2.f, ROW_H / 2.f});
+        placeCenter(accentButton, CONTROL_CENTER, ROW_H / 2.f);
         accentRow.menu->addChild(accentButton);
         scroll->m_contentLayer->addChild(accentRow.node);
 
@@ -402,22 +408,25 @@ bool ToastyMenu::init() {
                                 "Auto Save Macros",
                                 Mod::get()->getSavedValue<bool>("auto-save-macros", true)));
 
-        auto folderRow = this->makeRow("Open Folder", ROW_H, 95.f);
-        folderRow.node->setID("open-folder");
+        scroll->m_contentLayer->updateLayout();
+        scroll->scrollToTop();
+
+        auto folderMenu = CCMenu::create();
+        folderMenu->setPosition({0.f, 0.f});
+        folderMenu->setContentSize(m_size);
+        folderMenu->setID("settings-footer");
+        page->addChild(folderMenu);
 
         if (auto folderSpr = CCSprite::createWithSpriteFrameName("gj_folderBtn_001.png")) {
             folderSpr->setScale(.7f);
             auto folderButton = CCMenuItemSpriteExtra::create(
                 folderSpr, this, menu_selector(ToastyMenu::onOpenFolder));
-            folderButton->setID("open");
-            folderButton->setPosition(
-                {ROW_CONTROL_RIGHT - folderButton->getScaledContentWidth() / 2.f, ROW_H / 2.f});
-            folderRow.menu->addChild(folderButton);
+            folderButton->setID("open-folder");
+            placeRight(folderButton,
+                       PANEL_RIGHT - ROW_PAD,
+                       CONTENT_BOTTOM + ROW_PAD + folderButton->getScaledContentHeight() / 2.f);
+            folderMenu->addChild(folderButton);
         }
-        scroll->m_contentLayer->addChild(folderRow.node);
-
-        scroll->m_contentLayer->updateLayout();
-        scroll->scrollToTop();
     }
 
     // keybinds page
@@ -686,7 +695,7 @@ CCNode* ToastyMenu::makeToggleRow(ZStringView id, ZStringView title, bool on, bo
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
+    placeCenter(toggle, CONTROL_CENTER, ROW_H / 2.f);
     toggle->toggle(on);
     toggle->setID(fmt::format("{}-toggle", id));
     toggle->setEnabled(enabled);
@@ -744,7 +753,7 @@ CCNode* ToastyMenu::makeSeedRow() {
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    placeRight(toggle, ROW_CONTROL_RIGHT, 16.f);
+    placeCenter(toggle, CONTROL_CENTER, 16.f);
     toggle->toggle(toasty::seed::enabled());
     toggle->setID("set-seed-toggle");
     row.menu->addChild(toggle);
@@ -804,7 +813,7 @@ CCNode* ToastyMenu::makeSpeedhackRow() {
 
     m_speedToggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onSpeedhackToggle), .6f);
-    placeRight(m_speedToggle, ROW_CONTROL_RIGHT, 16.f);
+    placeCenter(m_speedToggle, CONTROL_CENTER, 16.f);
     m_speedToggle->toggle(toasty::speedhack::enabled());
     row.menu->addChild(m_speedToggle);
 
@@ -862,7 +871,7 @@ CCNode* ToastyMenu::makeTpsRow() {
 
     m_tpsToggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onTpsToggle), .6f);
-    placeRight(m_tpsToggle, ROW_CONTROL_RIGHT, 16.f);
+    placeCenter(m_tpsToggle, CONTROL_CENTER, 16.f);
     m_tpsToggle->toggle(toasty::tps::enabled());
     row.menu->addChild(m_tpsToggle);
 
@@ -881,7 +890,7 @@ CCNode* ToastyMenu::makeNoclipRow() {
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onToggleOption), .6f);
-    auto next = placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
+    auto next = placeCenter(toggle, CONTROL_CENTER, ROW_H / 2.f);
     toggle->toggle(Mod::get()->getSavedValue<bool>("noclip", false));
     toggle->setID("noclip-toggle");
     row.menu->addChild(toggle);
@@ -904,7 +913,7 @@ CCNode* ToastyMenu::makeFrameStepperRow() {
 
     auto toggle = CCMenuItemToggler::createWithStandardSprites(
         this, menu_selector(ToastyMenu::onFrameStepperToggle), .6f);
-    auto next = placeRight(toggle, ROW_CONTROL_RIGHT, ROW_H / 2.f);
+    auto next = placeCenter(toggle, CONTROL_CENTER, ROW_H / 2.f);
     toggle->toggle(toasty::stepper::enabled());
     toggle->setID("frame-stepper-toggle");
     row.menu->addChild(toggle);
@@ -1560,9 +1569,7 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
 }
 
 void ToastyMenu::onOpenFolder(CCObject*) {
-    if (!geode::utils::file::openFolder(Mod::get()->getSaveDir())) {
-        toasty::notifications::show("Unable to open mod folder", NotificationIcon::Error);
-    }
+    geode::utils::file::openFolder(Mod::get()->getSaveDir());
 }
 
 void ToastyMenu::onSocialLink(CCObject* sender) {
