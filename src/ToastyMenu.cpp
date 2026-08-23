@@ -1307,6 +1307,7 @@ void ToastyMenu::updateMacroInfo() {
             m_macroInfo.levelRevision = replay.levelRevision;
             m_macroInfo.platformer = replay.mode == toasty::replay::PlayMode::Platformer;
             m_macroInfo.seed = replay.seed;
+            m_macroInfo.startPos = replay.startPos;
         }
     }
 
@@ -1347,6 +1348,7 @@ void ToastyMenu::onMacroInfo(CCObject*) {
                             "<cy>TPS:</c> {}\n"
                             "<cy>Mode:</c> {}\n"
                             "<cy>Game Version:</c> {}\n"
+                            "<cy>Start:</c> {}\n"
                             "<cy>Seed:</c> {}\n"
                             "<cy>Frame Fixes:</c> {}",
                             toasty::replay::ttrl::displayName(m_macroInfoName),
@@ -1357,6 +1359,9 @@ void ToastyMenu::onMacroInfo(CCObject*) {
                             speedText(m_macroInfo.tps),
                             m_macroInfo.platformer ? "Platformer" : "Classic",
                             gameVersionText(m_macroInfo.gameVersion),
+                            m_macroInfo.startPos
+                                ? fmt::format("Start position at x {:.0f}", *m_macroInfo.startPos)
+                                : std::string("Level start"),
                             m_macroInfo.seed ? fmt::format("{}", *m_macroInfo.seed)
                                              : std::string("Not stored"),
                             m_macroInfo.frameFixes);

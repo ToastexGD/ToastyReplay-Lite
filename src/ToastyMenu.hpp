@@ -33,6 +33,7 @@ class ToastyMenu : public geode::Popup {
         uint64_t levelRevision = 0;
         bool platformer = false;
         std::optional<uint64_t> seed;
+        std::optional<float> startPos;
     };
     int m_tab = TabMain;
     NineSlice* m_modeBgs[3] = {};

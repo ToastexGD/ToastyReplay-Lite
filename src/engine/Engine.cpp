@@ -13,6 +13,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 using namespace geode::prelude;
@@ -73,6 +74,20 @@ namespace toasty::engine {
                 layer->m_isTestMode = session.previousTestMode;
             }
             session.changedTestMode = false;
+        }
+
+        std::optional<float> startPosOf(PlayLayer* layer) {
+            if (auto object = layer->m_startPosObject) {
+                return object->getPositionX();
+            }
+            return std::nullopt;
+        }
+
+        bool sameStartPos(std::optional<float> a, std::optional<float> b) {
+            if (a.has_value() != b.has_value()) {
+                return false;
+            }
+            return !a || std::fabs(*a - *b) < 1.f;
         }
 
         std::optional<std::string> validateReplay(Session const& session, Replay& replay) {
@@ -141,10 +156,11 @@ namespace toasty::engine {
             session->recording.seed = toasty::seed::value();
             toasty::seed::apply(layer, *session->recording.seed);
         }
-        layer->resetLevelFromStart();
+        layer->resetLevel();
         if (session->recording.seed) {
             toasty::seed::apply(layer, *session->recording.seed);
         }
+        session->recording.startPos = startPosOf(layer);
         session->recordingRate = toasty::tps::effectiveRate();
         session->mode = Mode::Record;
         resetAttempt(*session);
@@ -210,6 +226,14 @@ namespace toasty::engine {
             FLAlertLayer::create("Replay Rejected", *error, "OK")->show();
             return false;
         }
+        if (!sameStartPos(replay.startPos, startPosOf(layer))) {
+            auto message = replay.startPos
+                               ? "This replay was recorded from a different start position"
+                               : "This replay was recorded from the level start";
+            log::error("Replay rejected: {}", message);
+            FLAlertLayer::create("Replay Rejected", message, "OK")->show();
+            return false;
+        }
         auto replayRate = static_cast<int64_t>(replay.tps.numerator);
         auto needsOverride = toasty::tps::effectiveRate() != replayRate;
         if (needsOverride && !toasty::tps::beginReplayOverride(replayRate)) {
@@ -231,7 +255,7 @@ namespace toasty::engine {
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }
-        layer->resetLevelFromStart();
+        layer->resetLevel();
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }
