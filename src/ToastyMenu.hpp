@@ -5,6 +5,7 @@
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/ui/Scrollbar.hpp>
+#include <Geode/ui/SliderNode.hpp>
 #include <Geode/ui/TextArea.hpp>
 #include <filesystem>
 #include <optional>
@@ -60,7 +61,7 @@ class ToastyMenu : public geode::Popup {
     CCMenuItemToggler* m_tpsToggle = nullptr;
     ccColor3B m_accentColor = {0, 110, 60};
     NineSlice* m_accentSwatch = nullptr;
-    Slider* m_scaleSlider = nullptr;
+    SliderNode* m_scaleSlider = nullptr;
     CCLabelBMFont* m_scalePct = nullptr;
     bool m_dragging = false;
     CCPoint m_dragOffset;
@@ -118,7 +119,6 @@ class ToastyMenu : public geode::Popup {
     void onSocialLink(CCObject* sender);
     void onAccentColor(CCObject* sender);
     void setAccentColor(ccColor3B color);
-    void onScaleSlider(CCObject* sender);
     void onBindKey(CCObject* sender);
     void onClose(CCObject* sender) override;
 

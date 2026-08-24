@@ -17,6 +17,7 @@
 #include "ui/Watermark.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 static constexpr float POPUP_W = 450.f;
 static constexpr float POPUP_H = 290.f;
@@ -61,6 +62,10 @@ static constexpr ccColor3B PANEL_COLOR = {58, 29, 13};
 static constexpr ccColor3B DEFAULT_ACCENT_COLOR = {0, 110, 60};
 static constexpr float ROW_CONTROL_RIGHT = ROW_W - ROW_PAD;
 static constexpr float CONTROL_CENTER = ROW_CONTROL_RIGHT - SWATCH_SIZE / 2.f;
+static constexpr float BIND_SCALE = .55f;
+static constexpr float BIND_MAX_W = 88.f;
+static constexpr float SCALE_MIN = .7f;
+static constexpr float SCALE_MAX = 1.1f;
 
 static void
 moveCloseTopRight(CCMenuItemSpriteExtra* closeBtn, CCNode* mainLayer, CCSize const& size) {
@@ -108,8 +113,32 @@ static CCNode* makeTextRow(std::string text, float scale) {
     return row;
 }
 
+static void updateBindButton(CCMenuItemSpriteExtra* btn, char const* text) {
+    auto spr = typeinfo_cast<ButtonSprite*>(btn->getNormalImage());
+    if (!spr) {
+        return;
+    }
+    spr->setString(text);
+    spr->setScale(std::min(BIND_SCALE, BIND_MAX_W / std::max(1.f, spr->getContentWidth())));
+    btn->updateSprite();
+    placeRight(btn, ROW_CONTROL_RIGHT, 16.f);
+}
+
+static float boundedMenuScale(float value) {
+    if (!std::isfinite(value)) {
+        value = 1.f;
+    }
+    auto win = CCDirector::sharedDirector()->getWinSize();
+    auto fit = std::min(win.width / POPUP_W, win.height / POPUP_H);
+    return std::clamp(value, SCALE_MIN, std::min(SCALE_MAX, fit));
+}
+
+static float savedMenuScale() {
+    return boundedMenuScale(Mod::get()->getSavedValue<float>("menu-scale", 1.f));
+}
+
 static ToastyMenu* s_instance = nullptr;
-static ButtonSprite* s_captureBtn = nullptr;
+static CCMenuItemSpriteExtra* s_captureBtn = nullptr;
 static std::string s_captureId;
 static std::string s_capturePrev;
 static constexpr auto MACRO_FILE_ID = "toastexgd.toastyreplay-lite/macro-file";
@@ -371,12 +400,7 @@ bool ToastyMenu::init() {
         auto scaleRow = this->makeRow("Menu Scale", ROW_H, 95.f);
         scaleRow.node->setID("menu-scale");
 
-        float savedScale = Mod::get()->getSavedValue<float>("menu-scale", 1.f);
-
-        m_scaleSlider = Slider::create(this, menu_selector(ToastyMenu::onScaleSlider), .45f);
-        m_scaleSlider->setPosition({185.f, ROW_H / 2.f});
-        m_scaleSlider->setValue((savedScale - .7f) / .4f);
-        scaleRow.node->addChild(m_scaleSlider);
+        float savedScale = savedMenuScale();
 
         m_scalePct = CCLabelBMFont::create(
             fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f))).c_str(),
@@ -385,7 +409,26 @@ bool ToastyMenu::init() {
         m_scalePct->setScale(.35f);
         m_scalePct->setPosition({ROW_W - 10.f, ROW_H / 2.f});
         scaleRow.node->addChild(m_scalePct);
+
+        m_scaleSlider = SliderNode::create([](SliderNode*, float) {});
+        m_scaleSlider->setMin(SCALE_MIN);
+        m_scaleSlider->setMax(SCALE_MAX);
+        m_scaleSlider->setValue(savedScale);
+        m_scaleSlider->setScale(.45f);
+        m_scaleSlider->setPosition({185.f, ROW_H / 2.f});
+        scaleRow.node->addChild(m_scaleSlider);
         scroll->m_contentLayer->addChild(scaleRow.node);
+
+        m_scaleSlider->setSlideCallback([this](SliderNode*, float value) {
+            auto scale = boundedMenuScale(value);
+            Mod::get()->setSavedValue<float>("menu-scale", scale);
+            m_mainLayer->setScale(scale);
+            if (m_scalePct) {
+                m_scalePct->setString(
+                    fmt::format("{}%", static_cast<int>(std::round(scale * 100.f))).c_str());
+            }
+            this->clampMainLayer();
+        });
 
         auto accentRow = this->makeRow("Accent Color", ROW_H, 95.f);
         accentRow.node->setID("accent-color");
@@ -1017,11 +1060,10 @@ CCNode* ToastyMenu::makeKeybindRow(ZStringView title, ZStringView saveId, enumKe
         static_cast<enumKeyCodes>(Mod::get()->getSavedValue<int>(saveId, static_cast<int>(def)));
     auto spr =
         ButtonSprite::create(keyName(saved).c_str(), "goldFont.fnt", "GJ_button_04.png", .8f);
-    spr->setScale(.55f);
     auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(ToastyMenu::onBindKey));
     btn->setUserObject(CCString::create(saveId.c_str()));
     btn->setID("bind");
-    placeRight(btn, ROW_CONTROL_RIGHT, 16.f);
+    updateBindButton(btn, keyName(saved).c_str());
     row.menu->addChild(btn);
     return row.node;
 }
@@ -1029,7 +1071,7 @@ CCNode* ToastyMenu::makeKeybindRow(ZStringView title, ZStringView saveId, enumKe
 void ToastyMenu::show() {
     Popup::show();
 
-    float scale = Mod::get()->getSavedValue<float>("menu-scale", 1.f);
+    float scale = savedMenuScale();
 
     m_mainLayer->stopAllActions();
     m_mainLayer->setScale(scale);
@@ -1102,8 +1144,31 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
         return false;
     }
 
+    if (s_captureBtn) {
+        if (!down || repeat) {
+            return false;
+        }
+        if (key == KEY_Escape) {
+            updateBindButton(s_captureBtn, s_capturePrev.c_str());
+        } else {
+            Mod::get()->setSavedValue<int>(s_captureId, static_cast<int>(key));
+            updateBindButton(s_captureBtn, keyName(key).c_str());
+        }
+        s_captureBtn = nullptr;
+        return true;
+    }
+
+    auto openKey = Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_T));
+    if (down && !repeat && static_cast<int>(key) == openKey) {
+        if (s_instance)
+            s_instance->onClose(nullptr);
+        else
+            ToastyMenu::create()->show();
+        return true;
+    }
+
     auto stepKey = Mod::get()->getSavedValue<int>("key-frame-step", static_cast<int>(KEY_F3));
-    if (!s_captureBtn && static_cast<int>(key) == stepKey) {
+    if (static_cast<int>(key) == stepKey) {
         if (down && !repeat) {
             toasty::stepper::stepOnce();
             toasty::stepper::setKeyHeld(true);
@@ -1115,25 +1180,6 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
 
     if (!down || repeat) {
         return false;
-    }
-
-    if (s_captureBtn) {
-        if (key == KEY_Escape) {
-            s_captureBtn->setString(s_capturePrev.c_str());
-        } else {
-            Mod::get()->setSavedValue<int>(s_captureId, static_cast<int>(key));
-            s_captureBtn->setString(keyName(key).c_str());
-        }
-        s_captureBtn = nullptr;
-        return true;
-    }
-    auto openKey = Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_T));
-    if (static_cast<int>(key) == openKey) {
-        if (s_instance)
-            s_instance->onClose(nullptr);
-        else
-            ToastyMenu::create()->show();
-        return true;
     }
 
     auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
@@ -1612,26 +1658,18 @@ void ToastyMenu::setAccentColor(ccColor3B color) {
     }
 }
 
-void ToastyMenu::onScaleSlider(CCObject* sender) {
-    float scale = .7f + m_scaleSlider->getValue() * .4f;
-    Mod::get()->setSavedValue<float>("menu-scale", scale);
-    m_mainLayer->setScale(scale);
-    m_scalePct->setString(fmt::format("{}%", static_cast<int>(std::round(scale * 100.f))).c_str());
-    this->clampMainLayer();
-}
-
 void ToastyMenu::onBindKey(CCObject* sender) {
-    auto item = static_cast<CCMenuItemSpriteExtra*>(sender);
-    auto spr = static_cast<ButtonSprite*>(item->getNormalImage());
-    auto id = static_cast<CCString*>(item->getUserObject());
+    auto item = typeinfo_cast<CCMenuItemSpriteExtra*>(sender);
+    auto spr = item ? typeinfo_cast<ButtonSprite*>(item->getNormalImage()) : nullptr;
+    auto id = item ? typeinfo_cast<CCString*>(item->getUserObject()) : nullptr;
     if (!spr || !id)
         return;
     if (s_captureBtn)
-        s_captureBtn->setString(s_capturePrev.c_str());
-    s_captureBtn = spr;
+        updateBindButton(s_captureBtn, s_capturePrev.c_str());
+    s_captureBtn = item;
     s_captureId = id->getCString();
     s_capturePrev = spr->m_label ? spr->m_label->getString() : "";
-    spr->setString("...");
+    updateBindButton(item, "...");
 }
 
 void ToastyMenu::onClose(CCObject* sender) {

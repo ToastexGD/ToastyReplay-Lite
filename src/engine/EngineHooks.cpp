@@ -52,6 +52,9 @@ namespace {
     }
 
     void applyFix(PlayLayer* layer, FrameFix const& fix) {
+        if (fix.player == InputPlayer::Player2 && !layer->m_gameState.m_isDualMode) {
+            return;
+        }
         auto player = fix.player == InputPlayer::Player2 ? layer->m_player2 : layer->m_player1;
         if (!player) {
             return;
@@ -240,11 +243,9 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                 return;
             }
             auto& replay = *session->playback;
-            if (s_frameFixes) {
-                while (session->nextFix < replay.frameFixes.size() &&
-                       replay.frameFixes[session->nextFix].afterTick == session->tick) {
-                    applyFix(layer, replay.frameFixes[session->nextFix++]);
-                }
+            while (session->nextFix < replay.frameFixes.size() &&
+                   replay.frameFixes[session->nextFix].afterTick == session->tick) {
+                applyFix(layer, replay.frameFixes[session->nextFix++]);
             }
             session->tick++;
             if (session->tick >= replay.tickCount) {
@@ -254,7 +255,8 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         } else if (session->mode == Mode::Record) {
             if (s_frameFixes) {
                 captureFix(*session, layer->m_player1, InputPlayer::Player1);
-                if (layer->m_player2 && layer->m_player2 != layer->m_player1) {
+                if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                    layer->m_player2 != layer->m_player1) {
                     captureFix(*session, layer->m_player2, InputPlayer::Player2);
                 }
             }

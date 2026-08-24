@@ -1,3 +1,8 @@
+# v1.0.1
+- fixed an intel mac bug regarding 2p states under the frame fixing system.
+- fixed CCMenuItemSpriteExtra clipping with some keybinds.
+- fixed slider absolutely fucking up the menu.
+
 # v1.0.0
 
 - Add vanilla input recording and playback with the .ttrl replay format.
@@ -9,5 +14,3 @@
 - Add practice support so recording and playback resume from checkpoints.
 - Disable Click Between Frames and Click Between Steps only while recording or playing, then restore them.
 - Requires Geode 5.9.0
-
-- TTRL converter coming soon.

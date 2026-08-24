@@ -39,6 +39,7 @@ Find advanced options in the geode settings for the more experienced botters.
 **HUGE THANKS** to Peony, the developers of Silicate, and to Chag (owner of TCBot) for having amazing reference points and understanding.
 
 Inspired by XdBot and ZBot, go check them out!
+Ko-fi icon by dank_meme (Globed).
 
 **Development Team:**
 - ToastexGD
