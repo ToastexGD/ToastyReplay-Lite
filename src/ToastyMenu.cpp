@@ -1712,30 +1712,9 @@ void ToastyMenu::onMacroOptions(CCObject* sender) {
     if (name.empty()) {
         return;
     }
-    WeakRef<ToastyMenu> weak(this);
-    createQuickPopup(
-        "Macro Options",
-        fmt::format("<cy>{}</c>", toasty::replay::ttrl::displayName(name)),
-        "Rename",
-        "Convert",
-        [weak, name](auto, bool convert) {
-            auto menu = weak.lock();
-            if (!menu) {
-                return;
-            }
-            if (!convert) {
-                if (auto popup = RenameMacroPopup::create(menu.data(), name)) {
-                    popup->show();
-                }
-                return;
-            }
-            menu->onClose(nullptr);
-            queueInMainThread([name] {
-                if (toasty::engine::convertToFrameFixes(name)) {
-                    resumeIfPaused();
-                }
-            });
-        });
+    if (auto popup = RenameMacroPopup::create(this, std::move(name))) {
+        popup->show();
+    }
 }
 
 void ToastyMenu::onDeleteMacro(CCObject* sender) {
@@ -1869,7 +1848,7 @@ bool RenameMacroPopup::init(ToastyMenu* menu, std::string fileName) {
 
     m_menu = WeakRef(menu);
     m_fileName = std::move(fileName);
-    this->setTitle("Rename Macro");
+    this->setTitle("Macro Options");
     moveCloseTopRight(m_closeBtn, m_mainLayer, m_size);
 
     m_input = TextInput::create(230.f, "Macro name");
@@ -1885,13 +1864,21 @@ bool RenameMacroPopup::init(ToastyMenu* menu, std::string fileName) {
     menuNode->setContentSize(m_size);
     m_mainLayer->addChild(menuNode);
 
-    auto saveSprite = ButtonSprite::create("Save", "bigFont.fnt", "GJ_button_01.png", .8f);
+    auto saveSprite = ButtonSprite::create("Rename", "bigFont.fnt", "GJ_button_01.png", .8f);
     saveSprite->setScale(.7f);
     auto saveButton =
         CCMenuItemSpriteExtra::create(saveSprite, this, menu_selector(RenameMacroPopup::onSave));
-    saveButton->setPosition({150.f, 40.f});
+    saveButton->setPosition({102.f, 40.f});
     saveButton->setID("save");
     menuNode->addChild(saveButton);
+
+    auto convertSprite = ButtonSprite::create("Convert", "bigFont.fnt", "GJ_button_02.png", .8f);
+    convertSprite->setScale(.7f);
+    auto convertButton = CCMenuItemSpriteExtra::create(
+        convertSprite, this, menu_selector(RenameMacroPopup::onConvert));
+    convertButton->setPosition({198.f, 40.f});
+    convertButton->setID("convert");
+    menuNode->addChild(convertButton);
     return true;
 }
 
@@ -1920,4 +1907,18 @@ void RenameMacroPopup::onSave(CCObject* sender) {
         menu->refreshMacroList(true);
     }
     this->onClose(sender);
+}
+
+void RenameMacroPopup::onConvert(CCObject* sender) {
+    auto name = m_fileName;
+    auto menu = m_menu.lock();
+    this->onClose(sender);
+    if (menu) {
+        menu->onClose(nullptr);
+    }
+    queueInMainThread([name = std::move(name)] {
+        if (toasty::engine::convertToFrameFixes(name)) {
+            resumeIfPaused();
+        }
+    });
 }

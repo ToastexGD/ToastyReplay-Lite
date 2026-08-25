@@ -158,6 +158,7 @@ class RenameMacroPopup : public geode::Popup {
 
     bool init(ToastyMenu* menu, std::string fileName);
     void onSave(CCObject* sender);
+    void onConvert(CCObject* sender);
 
   public:
     static RenameMacroPopup* create(ToastyMenu* menu, std::string fileName);
