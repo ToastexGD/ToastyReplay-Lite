@@ -27,6 +27,7 @@ using toasty::replay::InputPlayer;
 
 namespace {
     bool s_frameFixes = false;
+    bool s_commandsHookAlive = false;
     bool s_loggedDriver = false;
     int s_driftLogs = 0;
 
@@ -287,6 +288,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
     }
 
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+        s_commandsHookAlive = true;
         if (!s_loggedDriver) {
             s_loggedDriver = true;
             log::info("Tick driver: processCommands");
@@ -305,6 +307,32 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         this->closeTick(session, PlayLayer::get());
         session->processingTick = false;
     }
+
+#ifdef GEODE_IS_MACOS
+    void processQueuedButtons(float dt, bool clearInputQueue) {
+        if (s_commandsHookAlive || dt <= 0.f) {
+            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+            return;
+        }
+
+        auto session = this->tickSession();
+        if (!session) {
+            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+            return;
+        }
+
+        if (!s_loggedDriver) {
+            s_loggedDriver = true;
+            log::info("Tick driver: processQueuedButtons");
+        }
+        session->processingTick = true;
+        toasty::engine::realignPlayback(PlayLayer::get());
+        this->feedPlaybackInputs(session);
+        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+        this->closeTick(session, PlayLayer::get());
+        session->processingTick = false;
+    }
+#endif
 };
 
 class $modify(ToastyReplayPlayLayer, PlayLayer) {
