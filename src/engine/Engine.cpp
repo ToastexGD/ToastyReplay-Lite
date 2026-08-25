@@ -33,6 +33,7 @@ namespace toasty::engine {
             } else {
                 session.heldInputs.fill(false);
             }
+            session.playbackHold = session.playbackHoldArm;
             if (session.mode == Mode::Record) {
                 session.recording.inputs.clear();
                 session.recording.frameFixes.clear();
