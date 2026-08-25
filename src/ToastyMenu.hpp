@@ -111,7 +111,7 @@ class ToastyMenu : public geode::Popup {
     void onNoclipOptions(CCObject* sender);
     void onSeedInfo(CCObject* sender);
     void onReplayMacro(CCObject* sender);
-    void onRenameMacro(CCObject* sender);
+    void onMacroOptions(CCObject* sender);
     void onDeleteMacro(CCObject* sender);
     static void finishAddMacroFile(std::optional<std::filesystem::path> picked);
     void onAddMacroFile(CCObject* sender);

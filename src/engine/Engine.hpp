@@ -42,6 +42,8 @@ namespace toasty::engine {
         bool previousTestMode = false;
         bool changedTestMode = false;
         bool tpsOverride = false;
+        bool capturing = false;
+        bool captureComplete = false;
         std::array<bool, 6> heldInputs = {};
 
         ~Session();
@@ -54,7 +56,9 @@ namespace toasty::engine {
     bool playing();
     bool startRecording();
     bool stopRecording(bool save);
-    bool loadReplayAndBegin(std::string name);
+    bool loadReplayAndBegin(std::string name, bool capturing = false);
+    bool convertToFrameFixes(std::string name);
+    void finishConversion();
     void togglePlayback();
     void stopPlayback();
     bool realignPlayback(PlayLayer* layer);

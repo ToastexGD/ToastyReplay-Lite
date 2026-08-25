@@ -66,6 +66,8 @@ namespace toasty::engine {
                     layer->handleButton(false, button, isPlayer1);
                 }
             }
+            session.capturing = false;
+            session.captureComplete = false;
             session.playback.reset();
             session.nextInput = 0;
             session.nextFix = 0;
@@ -265,7 +267,7 @@ namespace toasty::engine {
         return true;
     }
 
-    bool loadReplayAndBegin(std::string name) {
+    bool loadReplayAndBegin(std::string name, bool capturing) {
         auto layer = PlayLayer::get();
         auto session = activeSession();
         if (!layer || !session) {
@@ -320,6 +322,9 @@ namespace toasty::engine {
         session->previousTestMode = layer->m_isTestMode;
         session->changedTestMode = true;
         session->tpsOverride = needsOverride;
+        session->capturing = capturing;
+        session->captureComplete = false;
+        session->recording = {};
         layer->m_isTestMode = true;
         session->playback = std::move(replay);
         session->mode = Mode::Off;
@@ -339,11 +344,42 @@ namespace toasty::engine {
         return true;
     }
 
+    void finishConversion() {
+        auto session = activeSession();
+        if (!session || !session->capturing || !session->captureComplete || !session->playback) {
+            return;
+        }
+        session->capturing = false;
+        auto replay = *session->playback;
+        replay.frameFixes = std::move(session->recording.frameFixes);
+        session->recording = {};
+        if (replay.frameFixes.empty()) {
+            toasty::notifications::show("No frame fixes were captured", NotificationIcon::Error);
+            return;
+        }
+        replay::ttrl::Storage storage(replay::ttrl::defaultReplayDirectory());
+        auto result = storage.save(replay::ttrl::displayName(selectedReplay()) + " FF", replay);
+        if (result.isErr()) {
+            log::error("Failed to save converted replay: {}",
+                       replay::ttrl::describe(result.unwrapErr()));
+            toasty::notifications::show("Failed to save converted macro", NotificationIcon::Error);
+            return;
+        }
+        log::info("Converted {} with {} frame fixes", result.unwrap(), replay.frameFixes.size());
+        toasty::notifications::show(fmt::format("Saved {}", result.unwrap()),
+                                    NotificationIcon::Success);
+    }
+
+    bool convertToFrameFixes(std::string name) {
+        return loadReplayAndBegin(std::move(name), true);
+    }
+
     void stopPlayback() {
         auto session = activeSession();
         if (!session || session->mode != Mode::Play) {
             return;
         }
+        finishConversion();
         restorePlayback(*session, PlayLayer::get());
     }
 

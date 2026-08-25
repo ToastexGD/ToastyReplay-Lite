@@ -1020,9 +1020,9 @@ CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
     if (auto renameSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png")) {
         renameSpr->setScale(.45f);
         auto renameBtn = CCMenuItemSpriteExtra::create(
-            renameSpr, this, menu_selector(ToastyMenu::onRenameMacro));
+            renameSpr, this, menu_selector(ToastyMenu::onMacroOptions));
         renameBtn->setTag(index);
-        renameBtn->setID("rename");
+        renameBtn->setID("options");
         setMacroName(renameBtn, fileName);
         next = placeRight(renameBtn, next, middle);
         menu->addChild(renameBtn);
@@ -1707,14 +1707,35 @@ void ToastyMenu::onReplayMacro(CCObject*) {
     queueInMainThread([name = std::move(name)] { startReplayFromMenu(name); });
 }
 
-void ToastyMenu::onRenameMacro(CCObject* sender) {
+void ToastyMenu::onMacroOptions(CCObject* sender) {
     auto name = macroNameFromSender(sender);
     if (name.empty()) {
         return;
     }
-    if (auto popup = RenameMacroPopup::create(this, std::move(name))) {
-        popup->show();
-    }
+    WeakRef<ToastyMenu> weak(this);
+    createQuickPopup(
+        "Macro Options",
+        fmt::format("<cy>{}</c>", toasty::replay::ttrl::displayName(name)),
+        "Rename",
+        "Convert",
+        [weak, name](auto, bool convert) {
+            auto menu = weak.lock();
+            if (!menu) {
+                return;
+            }
+            if (!convert) {
+                if (auto popup = RenameMacroPopup::create(menu.data(), name)) {
+                    popup->show();
+                }
+                return;
+            }
+            menu->onClose(nullptr);
+            queueInMainThread([name] {
+                if (toasty::engine::convertToFrameFixes(name)) {
+                    resumeIfPaused();
+                }
+            });
+        });
 }
 
 void ToastyMenu::onDeleteMacro(CCObject* sender) {

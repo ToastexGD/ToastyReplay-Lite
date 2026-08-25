@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <unordered_map>
 
 using namespace geode::prelude;
@@ -27,6 +28,8 @@ using toasty::replay::InputPlayer;
 namespace {
     bool s_frameFixes = false;
     bool s_commandsHookAlive = false;
+    bool s_loggedDriver = false;
+    int s_driftLogs = 0;
 
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
@@ -58,6 +61,13 @@ namespace {
         auto player = fix.player == InputPlayer::Player2 ? layer->m_player2 : layer->m_player1;
         if (!player) {
             return;
+        }
+        auto driftX = player->getPositionX() - fix.x;
+        auto driftY = player->getPositionY() - fix.y;
+        if (s_driftLogs < 20 && (std::fabs(driftX) > 1.f || std::fabs(driftY) > 1.f)) {
+            s_driftLogs++;
+            log::warn("Frame fix drift at tick {}: dx={:.3f} dy={:.3f}", fix.afterTick, driftX,
+                      driftY);
         }
         player->setPosition({fix.x, fix.y});
         player->setRotation(fix.rotation);
@@ -252,8 +262,16 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                 applyFixState(layer, fix);
                 applyFix(layer, fix);
             }
+            if (session->capturing) {
+                captureFix(*session, layer->m_player1, InputPlayer::Player1);
+                if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                    layer->m_player2 != layer->m_player1) {
+                    captureFix(*session, layer->m_player2, InputPlayer::Player2);
+                }
+            }
             session->tick++;
             if (session->tick >= replay.tickCount) {
+                session->captureComplete = true;
                 toasty::engine::stopPlayback();
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
@@ -271,6 +289,10 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         s_commandsHookAlive = true;
+        if (!s_loggedDriver) {
+            s_loggedDriver = true;
+            log::info("Tick driver: processCommands");
+        }
 
         auto session = this->tickSession();
         if (!session) {
@@ -299,6 +321,10 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             return;
         }
 
+        if (!s_loggedDriver) {
+            s_loggedDriver = true;
+            log::info("Tick driver: processQueuedButtons");
+        }
         session->processingTick = true;
         toasty::engine::realignPlayback(PlayLayer::get());
         this->feedPlaybackInputs(session);
@@ -504,6 +530,11 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         auto fields = m_fields.self();
         if (fields->session.mode == Mode::Play && player && player->m_isDead &&
             !m_isPracticeMode) {
+            log::info("Replay death at tick {} of {} (fix {} of {})",
+                      fields->session.tick,
+                      fields->session.playback ? fields->session.playback->tickCount : 0,
+                      fields->session.nextFix,
+                      fields->session.playback ? fields->session.playback->frameFixes.size() : 0);
             toasty::engine::stopPlayback();
             toasty::notifications::show("Replay stopped after death", NotificationIcon::Warning);
         }
@@ -518,6 +549,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
             toasty::engine::stopRecording(
                 Mod::get()->getSavedValue<bool>("auto-save-macros", true));
         } else if (wasPlaying) {
+            fields->session.captureComplete = true;
             toasty::engine::stopPlayback();
             if (changedTestMode) {
                 m_isTestMode = true;
