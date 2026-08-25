@@ -6,7 +6,6 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -151,18 +150,12 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
         }
 
         auto timestep = timeWarp / static_cast<double>(target);
-        auto plan = fields->planner.advance(static_cast<double>(dt), timestep);
+        auto plan = fields->planner.advance(static_cast<double>(dt), timestep,
+                                           toasty::timing::tickQuantum(target));
         fields->delta = plan.delta;
         fields->customDelta = true;
         toasty::tps::patch::setExpected(plan.steps);
-#if defined(GEODE_IS_MACOS)
-        auto loadingLayer = m_loadingLayer;
-        m_loadingLayer = std::bit_cast<GJGameLoadingLayer*>(1.0 / static_cast<double>(target));
-#endif
         GJBaseGameLayer::update(static_cast<float>(plan.delta));
-#if defined(GEODE_IS_MACOS)
-        m_loadingLayer = loadingLayer;
-#endif
         fields->customDelta = false;
     }
 };

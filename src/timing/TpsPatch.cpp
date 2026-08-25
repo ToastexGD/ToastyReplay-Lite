@@ -4,7 +4,6 @@
 
 #include <asp/iter.hpp>
 #include <array>
-#include <bit>
 #include <cstddef>
 #include <cmath>
 #include <cstring>
@@ -32,7 +31,6 @@ namespace {
     alignas(8) ExpectedType s_expected = static_cast<ExpectedType>(1);
     ExpectedType* s_expectedTarget = &s_expected;
     Patch* s_expectedPatch = nullptr;
-    std::vector<Patch*> s_deltaPatches;
     bool s_initialized = false;
     bool s_available = false;
     std::string s_error;
@@ -197,56 +195,6 @@ namespace {
         return createPatch(address, std::move(bytes));
     }
 
-#if defined(GEODE_IS_MACOS)
-    Result<std::vector<Patch*>> createDeltaPatch() {
-        auto fieldOffset = static_cast<uint32_t>(offsetof(GJBaseGameLayer, m_loadingLayer));
-        if ((fieldOffset & 7) != 0) {
-            return Err("Mac delta storage offset was invalid");
-        }
-#if defined(GEODE_IS_INTEL_MAC)
-        static constexpr std::array<int16_t, 21> firstSignature = {
-            0xf3, 0x0f, 0x10, 0x0d, -1,   -1,   -1, -1, 0x0f, 0x2e, 0xca,
-            0xf2, 0x0f, 0x10, 0x0d, -1,   -1,   -1, -1, 0x76, 0x08};
-        static constexpr std::array<int16_t, 25> secondSignature = {
-            0xf3, 0x0f, 0x10, 0x0d, -1,   -1,   -1,   -1,   0x0f, 0x2e, 0xc8, 0xf3, 0x0f,
-            0x5a, 0xc0, 0xf2, 0x0f, 0x10, 0x0d, -1,   -1,   -1,   -1,   0x76, 0x04};
-        GEODE_UNWRAP_INTO(auto segment, textSegment());
-        auto first = findPattern(segment.first, segment.second, {firstSignature, 11});
-        if (!first)
-            return Err("Intel Mac tick delta signature was not found");
-        auto second = findPattern(segment.first, segment.second, {secondSignature, 15});
-        if (!second)
-            return Err("Intel Mac scaled tick delta signature was not found");
-
-        std::vector<Patch*> patches;
-        for (auto address : {first, second}) {
-            std::vector<uint8_t> bytes = {0xf2, 0x0f, 0x10, 0x8b};
-            append32(bytes, fieldOffset);
-            GEODE_UNWRAP_INTO(auto patch, createPatch(address, std::move(bytes)));
-            patches.push_back(patch);
-        }
-        return Ok(std::move(patches));
-#elif defined(GEODE_IS_ARM_MAC)
-        static constexpr std::array<int16_t, 8> signature = {
-            0xe9, 0xe3, 0x00, 0xb2, 0x29, 0xee, 0xe7, 0xf2};
-        GEODE_UNWRAP_INTO(auto segment, textSegment());
-        auto address = findPattern(segment.first, segment.second, {signature, 0});
-        if (!address)
-            return Err("ARM Mac 240 Hz constant signature was not found");
-        if (fieldOffset > 32760) {
-            return Err("ARM Mac delta storage offset was invalid");
-        }
-        std::vector<uint8_t> bytes;
-        append32(bytes, arm64Load64(9, 19, fieldOffset));
-        append32(bytes, 0xd503201f);
-        GEODE_UNWRAP_INTO(auto patch, createPatch(address, std::move(bytes)));
-        return Ok(std::vector<Patch*>{patch});
-#else
-        return Err("unsupported Mac architecture");
-#endif
-    }
-#endif
-
     void fail(std::string message) {
         s_error = std::move(message);
         s_available = false;
@@ -277,18 +225,6 @@ namespace toasty::tps::patch {
         }
         s_expectedPatch = expected.unwrapOr(nullptr);
 
-#if defined(GEODE_IS_MACOS)
-        auto delta = createDeltaPatch();
-        if (!delta) {
-            if (auto result = s_expectedPatch->disable(); !result) {
-                log::error("Failed to roll back TPS tick patch: {}", result.unwrapErr());
-            }
-            fail(delta.unwrapErr());
-            return false;
-        }
-        s_deltaPatches = delta.unwrap();
-#endif
-
         s_available = true;
         if (!setEnabled(Mod::get()->getSavedValue<bool>("tps-bypass", false))) {
             return false;
@@ -313,14 +249,6 @@ namespace toasty::tps::patch {
             return false;
         }
 
-        for (auto patch : s_deltaPatches) {
-            auto deltaResult = patch->toggle(enabled);
-            if (!deltaResult) {
-                (void)s_expectedPatch->disable();
-                fail(fmt::format("delta patch toggle failed: {}", deltaResult.unwrapErr()));
-                return false;
-            }
-        }
         return true;
     }
 
