@@ -115,7 +115,10 @@ namespace {
         player->m_vehicleSize = fix.vehicleSize;
         player->m_playerSpeed = fix.playerSpeed;
         player->m_gravityMod = fix.gravityMod;
-#if !defined(GEODE_IS_IOS)
+#if defined(GEODE_IS_IOS)
+        player->setScaleX(player->m_vehicleSize);
+        player->setScaleY(player->m_vehicleSize);
+#else
         player->updatePlayerScale();
 #endif
     }
