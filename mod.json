@@ -1,14 +1,11 @@
 {
 	"geode": "5.9.0",
 	"gd": {
-		"win": "2.2081",
-		"android": "2.2081",
-		"mac": "2.2081",
-		"ios": "2.2081"
+		"win": "2.2081"
 	},
 	"id": "toastexgd.toastyreplay-lite",
 	"name": "ToastyReplay-Lite",
-	"version": "v1.0.1",
+	"version": "v1.0.2",
 	"developers": [
 		"Toastexgd",
 		"Slideglide",

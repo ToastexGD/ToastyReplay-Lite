@@ -1,3 +1,6 @@
+# v1.0.2
+- windows only for now while the mobile ports get sorted out.
+
 # v1.0.1
 - fixed an intel mac bug regarding 2p states under the frame fixing system.
 - fixed CCMenuItemSpriteExtra clipping with some keybinds.
