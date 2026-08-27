@@ -405,8 +405,8 @@ bool ToastyMenu::init() {
 
         float savedScale = savedMenuScale();
 
-        const std::string scalePctStr = fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f)));
-        m_scalePct = Label::create(scalePctStr, "bigFont.fnt");
+        std::string scalePctStr = fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f)));
+        m_scalePct = Label::create(std::move(scalePctStr), "bigFont.fnt");
         m_scalePct->setAnchorPoint({1.f, .5f});
         m_scalePct->setScale(.35f);
         m_scalePct->setPosition({ROW_W - 10.f, ROW_H / 2.f});
