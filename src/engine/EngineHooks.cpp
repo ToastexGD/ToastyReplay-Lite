@@ -102,9 +102,7 @@ namespace {
         player->m_vehicleSize = fix.vehicleSize;
         player->m_playerSpeed = fix.playerSpeed;
         player->m_gravityMod = fix.gravityMod;
-#if !defined(GEODE_IS_IOS)
         player->updatePlayerScale();
-#endif
     }
 
     void captureFix(Session& session, PlayerObject* player, InputPlayer inputPlayer) {

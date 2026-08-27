@@ -1,3 +1,9 @@
+# v1.0.3
+- added android and ios support.
+- fixed the android 64 bit tick patch skipping the step count conversion, which made every tps above vanilla run too fast.
+- fixed the patchless ios tick storage pointing into a read only part of the binary.
+- the player scale is applied again after a frame fix on ios.
+
 # v1.0.2
 - windows only for now while the mobile ports get sorted out.
 

@@ -40,7 +40,7 @@ namespace {
     std::string s_error;
 
 #if defined(GEODE_IS_IOS)
-    constexpr uintptr_t PatchlessExpectedStorage = 0x8c4010;
+    constexpr uintptr_t PatchlessExpectedStorage = 0x8b2000;
 #endif
 
     struct Pattern {
@@ -149,7 +149,7 @@ namespace {
             return Err("Android 64-bit 2.2081 tick signature was not found");
         appendArm64Address(bytes, reinterpret_cast<uintptr_t>(s_expectedTarget), 9);
         append32(bytes, 0xb9400120);
-        append32(bytes, arm64Branch(address + bytes.size(), address + 0x28));
+        append32(bytes, arm64Branch(address + bytes.size(), address + 0x24));
 #elif defined(GEODE_IS_ANDROID32)
         static constexpr std::array<int16_t, 15> signature = {
             0xee, -1, -1, -1, 0xee, -1, -1, 0xf7, 0xee, -1, 0x7b, 0x17, 0xee, 0x90, 0x0a};
@@ -265,7 +265,7 @@ namespace toasty::tps::patch {
             static_assert(GEODE_COMP_GD_VERSION == 22081,
                           "Patchless iOS TPS bypass requires Geometry Dash 2.2081");
             GEODE_MOD_STATIC_PATCH(0x1fe724,
-                                   {0x29, 0x36, 0x00, 0xd0, 0x20, 0x11, 0x40, 0xbd, 0x1f, 0x20,
+                                   {0xa9, 0x35, 0x00, 0x90, 0x20, 0x01, 0x40, 0xbd, 0x1f, 0x20,
                                     0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5,
                                     0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20,
                                     0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5});

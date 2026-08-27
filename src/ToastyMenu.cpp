@@ -5,6 +5,7 @@
 #include <fmt/ranges.h>
 #include <Geode/ui/ColorPickPopup.hpp>
 #include <Geode/utils/async.hpp>
+#include <Geode/utils/coro.hpp>
 #include <Geode/utils/web.hpp>
 #include "engine/Engine.hpp"
 #include "engine/RandomSeed.hpp"
@@ -1608,7 +1609,7 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
     utils::file::FilePickOptions options;
     options.filters.push_back({"ToastyReplay Macro", {"*.ttrl"}});
 
-    async::spawn([options = std::move(options)]() -> arc::Future<void> {
+    $async(options = std::move(options)) {
         auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
         queueInMainThread([result = std::move(result)]() mutable {
             if (result.isErr()) {
@@ -1618,7 +1619,7 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
             }
             ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
         });
-    });
+    };
 }
 
 void ToastyMenu::onOpenFolder(CCObject*) {
