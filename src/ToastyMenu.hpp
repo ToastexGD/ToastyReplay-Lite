@@ -40,7 +40,7 @@ class ToastyMenu : public geode::Popup {
     geode::Label* m_modeLabels[3] = {};
     geode::NineSlice* m_tabBgs[TabCount] = {};
     cocos2d::CCNode* m_pages[TabCount] = {};
-    std::vector<CCLayer*> m_pageTouchNodes[TabCount];
+    std::vector<cocos2d::CCLayer*> m_pageTouchNodes[TabCount];
     geode::ScrollLayer* m_macroScroll = nullptr;
     std::vector<std::string> m_macroNames;
     std::vector<geode::NineSlice*> m_macroRowBgs;
@@ -71,9 +71,9 @@ class ToastyMenu : public geode::Popup {
     void addSidebar();
     void addSocialButton(cocos2d::CCMenu* menu, cocos2d::CCSprite* icon, geode::ZStringView id, geode::ZStringView url);
     Group makePage(int tab);
-    void addPageTitle(CCNode* page, geode::ZStringView title, geode::ZStringView hint = {});
-    geode::NineSlice* addPanel(CCNode* page, cocos2d::CCPoint center, cocos2d::CCSize size);
-    geode::ScrollLayer* addScroll(CCNode* page, int tab, cocos2d::CCPoint pos, cocos2d::CCSize size);
+    void addPageTitle(cocos2d::CCNode* page, geode::ZStringView title, geode::ZStringView hint = {});
+    geode::NineSlice* addPanel(cocos2d::CCNode* page, cocos2d::CCPoint center, cocos2d::CCSize size);
+    geode::ScrollLayer* addScroll(cocos2d::CCNode* page, int tab, cocos2d::CCPoint pos, cocos2d::CCSize size);
 
     Group makeRow(geode::ZStringView title, float height, float titleWidth, bool enabled = true);
     cocos2d::CCNode* makeToggleRow(geode::ZStringView id, geode::ZStringView title, bool on, bool enabled = true);

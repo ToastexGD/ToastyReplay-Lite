@@ -426,8 +426,8 @@ bool ToastyMenu::init() {
             Mod::get()->setSavedValue<float>("menu-scale", scale);
             m_mainLayer->setScale(scale);
             if (m_scalePct) {
-                m_scalePct->setString(
-                    fmt::format("{}%", static_cast<int>(std::round(scale * 100.f))).c_str());
+                std::string scalePctStr = fmt::format("{}%", static_cast<int>(std::round(scale * 100.f)));
+                m_scalePct->setText(std::move(scalePctStr));
             }
             this->clampMainLayer();
         });
@@ -1319,7 +1319,7 @@ void ToastyMenu::updateMacroInfo() {
     if (name.empty()) {
         m_macroInfo = {};
         m_macroInfoName.clear();
-        m_macroInfoLabel->setString("No macro selected");
+        m_macroInfoLabel->setText("No macro selected");
         m_macroInfoLabel->setColor({150, 150, 150});
         m_macroInfoLabel->setPositionX(m_macroInfoRightWide);
         m_macroInfoLabel->setLimitLabelWidth(
@@ -1363,10 +1363,10 @@ void ToastyMenu::updateMacroInfo() {
     float right = showInfo ? m_macroInfoRight : m_macroInfoRightWide;
 
     if (m_macroInfo.loaded) {
-        m_macroInfoLabel->setString(fmt::format("{} actions", m_macroInfo.inputs).c_str());
+        m_macroInfoLabel->setText(fmt::format("{} actions", m_macroInfo.inputs));
         m_macroInfoLabel->setColor({255, 255, 255});
     } else {
-        m_macroInfoLabel->setString("Unreadable macro");
+        m_macroInfoLabel->setText("Unreadable macro");
         m_macroInfoLabel->setColor({255, 130, 130});
     }
     m_macroInfoLabel->setPositionX(right);
