@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <cmath>
 
+using namespace geode::prelude;
+
 static constexpr float POPUP_W = 450.f;
 static constexpr float POPUP_H = 290.f;
 static constexpr float MARGIN = 12.f;
@@ -290,9 +292,9 @@ bool ToastyMenu::init() {
             node->addChild(bg);
             m_modeBgs[i] = bg;
 
-            auto label = CCLabelBMFont::create(modeNames[i], "bigFont.fnt");
+            auto label = Label::create(modeNames[i], "bigFont.fnt");
             label->setPosition({49.f, 20.f});
-            label->limitLabelWidth(78.f, .5f, .1f);
+            label->setLimitLabelWidth(78.f, .5f, .1f);
             node->addChild(label);
             m_modeLabels[i] = label;
 
@@ -380,7 +382,7 @@ bool ToastyMenu::init() {
             footerMenu->addChild(m_macroInfoButton);
         }
 
-        m_macroInfoLabel = CCLabelBMFont::create("", "bigFont.fnt");
+        m_macroInfoLabel = Label::create("", "bigFont.fnt");
         m_macroInfoLabel->setAnchorPoint({1.f, .5f});
         m_macroInfoLabel->setPosition({m_macroInfoRight, footerY});
         m_macroInfoLabel->setID("macro-info-label");
@@ -403,9 +405,8 @@ bool ToastyMenu::init() {
 
         float savedScale = savedMenuScale();
 
-        m_scalePct = CCLabelBMFont::create(
-            fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f))).c_str(),
-            "bigFont.fnt");
+        const std::string scalePctStr = fmt::format("{}%", static_cast<int>(std::round(savedScale * 100.f)));
+        m_scalePct = Label::create(scalePctStr, "bigFont.fnt");
         m_scalePct->setAnchorPoint({1.f, .5f});
         m_scalePct->setScale(.35f);
         m_scalePct->setPosition({ROW_W - 10.f, ROW_H / 2.f});
@@ -515,9 +516,9 @@ bool ToastyMenu::init() {
 
         auto devRow = CCNode::create();
         devRow->setContentSize({ROW_W, 22.f});
-        auto dev = CCLabelBMFont::create(modDevelopers().c_str(), "goldFont.fnt");
+        auto dev = Label::create(modDevelopers().c_str(), "goldFont.fnt");
         dev->setPosition({ROW_W / 2.f, 11.f});
-        dev->limitLabelWidth(ROW_W - 20.f, .5f, .1f);
+        dev->setLimitLabelWidth(ROW_W - 20.f, .5f, .1f);
         devRow->addChild(dev);
         scroll->m_contentLayer->addChild(devRow);
 
@@ -525,7 +526,7 @@ bool ToastyMenu::init() {
 
         auto verRow = CCNode::create();
         verRow->setContentSize({ROW_W, 22.f});
-        auto ver = CCLabelBMFont::create(modVersion().c_str(), "bigFont.fnt");
+        auto ver = Label::create(modVersion(), "bigFont.fnt");
         ver->setScale(.4f);
         ver->setPosition({ROW_W / 2.f, 11.f});
         verRow->addChild(ver);
@@ -563,13 +564,13 @@ void ToastyMenu::addHeader() {
         titleX = MARGIN + HEADER_ICON + GAP;
     }
 
-    auto title = CCLabelBMFont::create("ToastyReplay Lite", "goldFont.fnt");
+    auto title = Label::create("ToastyReplay Lite", "goldFont.fnt");
     title->setAnchorPoint({0.f, .5f});
     title->setPosition({titleX, HEADER_Y});
-    title->limitLabelWidth(165.f, .5f, .1f);
+    title->setLimitLabelWidth(165.f, .5f, .1f);
     m_mainLayer->addChild(title);
 
-    auto version = CCLabelBMFont::create(modVersion().c_str(), "bigFont.fnt");
+    auto version = Label::create(modVersion(), "bigFont.fnt");
     version->setAnchorPoint({0.f, .5f});
     version->setScale(.3f);
     version->setPosition({title->getPositionX() + title->getScaledContentWidth() + 12.f, HEADER_Y});
@@ -603,10 +604,10 @@ void ToastyMenu::addSidebar() {
         node->addChild(bg);
         m_tabBgs[i] = bg;
 
-        auto label = CCLabelBMFont::create(name, "bigFont.fnt");
+        auto label = Label::create(name, "bigFont.fnt");
         label->setAnchorPoint({0.f, .5f});
         label->setPosition({ROW_PAD, TAB_H / 2.f});
-        label->limitLabelWidth(TAB_W - ROW_PAD * 2.f, .4f, .1f);
+        label->setLimitLabelWidth(TAB_W - ROW_PAD * 2.f, .4f, .1f);
         node->addChild(label);
 
         auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onTab));
@@ -666,20 +667,20 @@ ToastyMenu::Group ToastyMenu::makePage(int tab) {
 }
 
 void ToastyMenu::addPageTitle(CCNode* page, ZStringView title, ZStringView hint) {
-    auto label = CCLabelBMFont::create(title.c_str(), "goldFont.fnt");
+    auto label = Label::create(title, "goldFont.fnt");
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({PANEL_LEFT, TITLE_Y});
-    label->limitLabelWidth(160.f, .5f, .1f);
+    label->setLimitLabelWidth(160.f, .5f, .1f);
     page->addChild(label);
 
     if (hint.empty())
         return;
 
-    auto hintLabel = CCLabelBMFont::create(hint.c_str(), "chatFont.fnt");
+    auto hintLabel = Label::create(hint, "chatFont.fnt");
     hintLabel->setAnchorPoint({1.f, .5f});
     hintLabel->setOpacity(120);
     hintLabel->setPosition({POPUP_W - MARGIN, TITLE_Y});
-    hintLabel->limitLabelWidth(130.f, .4f, .1f);
+    hintLabel->setLimitLabelWidth(130.f, .4f, .1f);
     page->addChild(hintLabel);
 }
 
@@ -718,10 +719,10 @@ ToastyMenu::makeRow(ZStringView title, float height, float titleWidth, bool enab
     bg->setPosition({ROW_W / 2.f, height / 2.f});
     row.node->addChild(bg);
 
-    auto label = CCLabelBMFont::create(title.c_str(), "bigFont.fnt");
+    auto label = Label::create(title, "bigFont.fnt");
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({10.f, height / 2.f});
-    label->limitLabelWidth(titleWidth, .45f, .1f);
+    label->setLimitLabelWidth(titleWidth, .45f, .1f);
     if (!enabled) {
         label->setColor({145, 145, 145});
     }
@@ -983,9 +984,9 @@ CCNode* ToastyMenu::makeSectionRow(ZStringView title) {
     bg->setPosition({ROW_W / 2.f, 10.f});
     row->addChild(bg);
 
-    auto label = CCLabelBMFont::create(title.c_str(), "goldFont.fnt");
+    auto label = Label::create(title, "goldFont.fnt");
     label->setPosition({ROW_W / 2.f, 10.f});
-    label->limitLabelWidth(ROW_W - 20.f, .35f, .1f);
+    label->setLimitLabelWidth(ROW_W - 20.f, .35f, .1f);
     row->addChild(label);
     return row;
 }
@@ -1032,10 +1033,10 @@ CCNode* ToastyMenu::makeMacroRow(std::string const& fileName, int index) {
     float nameWidth = next - ROW_PAD;
 
     auto displayName = toasty::replay::ttrl::displayName(fileName);
-    auto label = CCLabelBMFont::create(displayName.c_str(), "chatFont.fnt");
+    auto label = Label::create(displayName, "chatFont.fnt");
     label->setAnchorPoint({0.f, .5f});
     label->setPosition({ROW_PAD, middle});
-    label->limitLabelWidth(nameWidth, .65f, .1f);
+    label->setLimitLabelWidth(nameWidth, .65f, .1f);
     row->addChild(label);
 
     if (auto hitSpr = CCSprite::create("square02b_001.png")) {
@@ -1321,7 +1322,7 @@ void ToastyMenu::updateMacroInfo() {
         m_macroInfoLabel->setString("No macro selected");
         m_macroInfoLabel->setColor({150, 150, 150});
         m_macroInfoLabel->setPositionX(m_macroInfoRightWide);
-        m_macroInfoLabel->limitLabelWidth(
+        m_macroInfoLabel->setLimitLabelWidth(
             m_macroInfoRightWide - m_macroInfoLeft, FOOTER_TEXT_SCALE, .1f);
         if (m_macroInfoButton) {
             m_macroInfoButton->setVisible(false);
@@ -1369,7 +1370,7 @@ void ToastyMenu::updateMacroInfo() {
         m_macroInfoLabel->setColor({255, 130, 130});
     }
     m_macroInfoLabel->setPositionX(right);
-    m_macroInfoLabel->limitLabelWidth(right - m_macroInfoLeft, FOOTER_TEXT_SCALE, .1f);
+    m_macroInfoLabel->setLimitLabelWidth(right - m_macroInfoLeft, FOOTER_TEXT_SCALE, .1f);
     if (m_macroInfoButton) {
         m_macroInfoButton->setVisible(m_macroInfo.loaded);
     }
@@ -1785,10 +1786,10 @@ bool OptionsPopup::init(std::string title, std::vector<Option> options) {
 
     auto y = height - 62.f;
     for (auto const& option : options) {
-        auto label = CCLabelBMFont::create(option.title.c_str(), "bigFont.fnt");
+        auto label = Label::create(option.title, "bigFont.fnt");
         label->setAnchorPoint({0.f, .5f});
         label->setPosition({24.f, y});
-        label->limitLabelWidth(150.f, .5f, .1f);
+        label->setLimitLabelWidth(150.f, .5f, .1f);
         m_mainLayer->addChild(label);
 
         if (!option.info.empty()) {

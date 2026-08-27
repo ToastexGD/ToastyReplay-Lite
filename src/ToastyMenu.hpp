@@ -3,6 +3,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/ui/Popup.hpp>
 #include <Geode/ui/TextInput.hpp>
+#include <Geode/ui/Label.hpp>
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/ui/Scrollbar.hpp>
 #include <Geode/ui/SliderNode.hpp>
@@ -11,16 +12,14 @@
 #include <optional>
 #include <vector>
 
-using namespace geode::prelude;
-
 class ToastyMenu : public geode::Popup {
     friend class RenameMacroPopup;
 
   protected:
     enum Tab { TabMain, TabMacros, TabSettings, TabKeybinds, TabAbout, TabCount };
     struct Group {
-        CCNode* node = nullptr;
-        CCMenu* menu = nullptr;
+        cocos2d::CCNode* node = nullptr;
+        cocos2d::CCMenu* menu = nullptr;
     };
     struct MacroInfo {
         bool loaded = false;
@@ -37,55 +36,55 @@ class ToastyMenu : public geode::Popup {
         std::optional<float> startPos;
     };
     int m_tab = TabMain;
-    NineSlice* m_modeBgs[3] = {};
-    CCLabelBMFont* m_modeLabels[3] = {};
-    NineSlice* m_tabBgs[TabCount] = {};
-    CCNode* m_pages[TabCount] = {};
+    geode::NineSlice* m_modeBgs[3] = {};
+    geode::Label* m_modeLabels[3] = {};
+    geode::NineSlice* m_tabBgs[TabCount] = {};
+    cocos2d::CCNode* m_pages[TabCount] = {};
     std::vector<CCLayer*> m_pageTouchNodes[TabCount];
-    ScrollLayer* m_macroScroll = nullptr;
+    geode::ScrollLayer* m_macroScroll = nullptr;
     std::vector<std::string> m_macroNames;
-    std::vector<NineSlice*> m_macroRowBgs;
+    std::vector<geode::NineSlice*> m_macroRowBgs;
     int m_selectedMacro = -1;
     MacroInfo m_macroInfo;
     std::string m_macroInfoName;
-    CCLabelBMFont* m_macroInfoLabel = nullptr;
+    geode::Label* m_macroInfoLabel = nullptr;
     CCMenuItemSpriteExtra* m_macroInfoButton = nullptr;
     float m_macroInfoLeft = 0.f;
     float m_macroInfoRight = 0.f;
     float m_macroInfoRightWide = 0.f;
     std::optional<std::filesystem::file_time_type> m_macroDirTime;
-    TextInput* m_seedInput = nullptr;
-    TextInput* m_speedInput = nullptr;
+    geode::TextInput* m_seedInput = nullptr;
+    geode::TextInput* m_speedInput = nullptr;
     CCMenuItemToggler* m_speedToggle = nullptr;
-    TextInput* m_tpsInput = nullptr;
+    geode::TextInput* m_tpsInput = nullptr;
     CCMenuItemToggler* m_tpsToggle = nullptr;
-    ccColor3B m_accentColor = {0, 110, 60};
-    NineSlice* m_accentSwatch = nullptr;
-    SliderNode* m_scaleSlider = nullptr;
-    CCLabelBMFont* m_scalePct = nullptr;
+    cocos2d::ccColor3B m_accentColor = {0, 110, 60};
+    geode::NineSlice* m_accentSwatch = nullptr;
+    geode::SliderNode* m_scaleSlider = nullptr;
+    geode::Label* m_scalePct = nullptr;
     bool m_dragging = false;
-    CCPoint m_dragOffset;
+    cocos2d::CCPoint m_dragOffset;
 
     bool init() override;
     ~ToastyMenu();
     void addHeader();
     void addSidebar();
-    void addSocialButton(CCMenu* menu, CCSprite* icon, ZStringView id, ZStringView url);
+    void addSocialButton(cocos2d::CCMenu* menu, cocos2d::CCSprite* icon, geode::ZStringView id, geode::ZStringView url);
     Group makePage(int tab);
-    void addPageTitle(CCNode* page, ZStringView title, ZStringView hint = {});
-    NineSlice* addPanel(CCNode* page, CCPoint center, CCSize size);
-    ScrollLayer* addScroll(CCNode* page, int tab, CCPoint pos, CCSize size);
+    void addPageTitle(CCNode* page, geode::ZStringView title, geode::ZStringView hint = {});
+    geode::NineSlice* addPanel(CCNode* page, cocos2d::CCPoint center, cocos2d::CCSize size);
+    geode::ScrollLayer* addScroll(CCNode* page, int tab, cocos2d::CCPoint pos, cocos2d::CCSize size);
 
-    Group makeRow(ZStringView title, float height, float titleWidth, bool enabled = true);
-    CCNode* makeToggleRow(ZStringView id, ZStringView title, bool on, bool enabled = true);
-    CCNode* makeSeedRow();
-    CCNode* makeSpeedhackRow();
-    CCNode* makeTpsRow();
-    CCNode* makeFrameStepperRow();
-    CCNode* makeNoclipRow();
-    CCNode* makeSectionRow(ZStringView title);
-    CCNode* makeMacroRow(std::string const& fileName, int index);
-    CCNode* makeKeybindRow(ZStringView title, ZStringView saveId, enumKeyCodes def);
+    Group makeRow(geode::ZStringView title, float height, float titleWidth, bool enabled = true);
+    cocos2d::CCNode* makeToggleRow(geode::ZStringView id, geode::ZStringView title, bool on, bool enabled = true);
+    cocos2d::CCNode* makeSeedRow();
+    cocos2d::CCNode* makeSpeedhackRow();
+    cocos2d::CCNode* makeTpsRow();
+    cocos2d::CCNode* makeFrameStepperRow();
+    cocos2d::CCNode* makeNoclipRow();
+    cocos2d::CCNode* makeSectionRow(geode::ZStringView title);
+    cocos2d::CCNode* makeMacroRow(std::string const& fileName, int index);
+    cocos2d::CCNode* makeKeybindRow(geode::ZStringView title, geode::ZStringView saveId, cocos2d::enumKeyCodes def);
     void updateModes();
     void updateTabs();
     void updatePages();
@@ -94,42 +93,42 @@ class ToastyMenu : public geode::Popup {
     void refreshMacroList(bool keepScroll = false);
     void checkMacroDirectory(float dt);
     void updateMacroInfo();
-    void onMacroInfo(CCObject* sender);
-    void onMode(CCObject* sender);
-    void onTab(CCObject* sender);
-    void onSelectMacro(CCObject* sender);
-    void onToggleOption(CCObject* sender);
-    void onSpeedhackToggle(CCObject* sender);
-    void onSpeedhackAdjust(CCObject* sender);
-    void onSpeedhackOptions(CCObject* sender);
-    void onSeedAdjust(CCObject* sender);
-    void onTpsToggle(CCObject* sender);
-    void onTpsAdjust(CCObject* sender);
-    void onTpsInfo(CCObject* sender);
-    void onFrameStepperToggle(CCObject* sender);
-    void onFrameStepperOptions(CCObject* sender);
-    void onNoclipOptions(CCObject* sender);
-    void onSeedInfo(CCObject* sender);
-    void onReplayMacro(CCObject* sender);
-    void onRenameMacro(CCObject* sender);
-    void onDeleteMacro(CCObject* sender);
+    void onMacroInfo(cocos2d::CCObject* sender);
+    void onMode(cocos2d::CCObject* sender);
+    void onTab(cocos2d::CCObject* sender);
+    void onSelectMacro(cocos2d::CCObject* sender);
+    void onToggleOption(cocos2d::CCObject* sender);
+    void onSpeedhackToggle(cocos2d::CCObject* sender);
+    void onSpeedhackAdjust(cocos2d::CCObject* sender);
+    void onSpeedhackOptions(cocos2d::CCObject* sender);
+    void onSeedAdjust(cocos2d::CCObject* sender);
+    void onTpsToggle(cocos2d::CCObject* sender);
+    void onTpsAdjust(cocos2d::CCObject* sender);
+    void onTpsInfo(cocos2d::CCObject* sender);
+    void onFrameStepperToggle(cocos2d::CCObject* sender);
+    void onFrameStepperOptions(cocos2d::CCObject* sender);
+    void onNoclipOptions(cocos2d::CCObject* sender);
+    void onSeedInfo(cocos2d::CCObject* sender);
+    void onReplayMacro(cocos2d::CCObject* sender);
+    void onRenameMacro(cocos2d::CCObject* sender);
+    void onDeleteMacro(cocos2d::CCObject* sender);
     static void finishAddMacroFile(std::optional<std::filesystem::path> picked);
-    void onAddMacroFile(CCObject* sender);
-    void onOpenFolder(CCObject* sender);
-    void onSocialLink(CCObject* sender);
-    void onAccentColor(CCObject* sender);
-    void setAccentColor(ccColor3B color);
-    void onBindKey(CCObject* sender);
-    void onClose(CCObject* sender) override;
+    void onAddMacroFile(cocos2d::CCObject* sender);
+    void onOpenFolder(cocos2d::CCObject* sender);
+    void onSocialLink(cocos2d::CCObject* sender);
+    void onAccentColor(cocos2d::CCObject* sender);
+    void setAccentColor(cocos2d::ccColor3B color);
+    void onBindKey(cocos2d::CCObject* sender);
+    void onClose(cocos2d::CCObject* sender) override;
 
-    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override;
-    void ccTouchMoved(CCTouch* touch, CCEvent* event) override;
-    void ccTouchEnded(CCTouch* touch, CCEvent* event) override;
+    bool ccTouchBegan(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
+    void ccTouchMoved(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
+    void ccTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
 
   public:
     static ToastyMenu* create();
     static bool isOpen();
-    static bool handleKey(enumKeyCodes key, bool down, bool repeat);
+    static bool handleKey(cocos2d::enumKeyCodes key, bool down, bool repeat);
     void show() override;
 };
 
@@ -146,18 +145,18 @@ class OptionsPopup : public geode::Popup {
 
   protected:
     bool init(std::string title, std::vector<Option> options);
-    void onToggle(CCObject* sender);
-    void onInfo(CCObject* sender);
+    void onToggle(cocos2d::CCObject* sender);
+    void onInfo(cocos2d::CCObject* sender);
 };
 
 class RenameMacroPopup : public geode::Popup {
   protected:
-    WeakRef<ToastyMenu> m_menu;
+    geode::WeakRef<ToastyMenu> m_menu;
     std::string m_fileName;
-    TextInput* m_input = nullptr;
+    geode::TextInput* m_input = nullptr;
 
     bool init(ToastyMenu* menu, std::string fileName);
-    void onSave(CCObject* sender);
+    void onSave(cocos2d::CCObject* sender);
 
   public:
     static RenameMacroPopup* create(ToastyMenu* menu, std::string fileName);
