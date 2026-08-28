@@ -28,6 +28,11 @@ namespace {
     bool s_frameFixes = false;
     bool s_commandsHookAlive = false;
 
+    uint64_t derivedTick(GJBaseGameLayer* layer) {
+        auto rate = static_cast<double>(toasty::tps::effectiveRate());
+        return static_cast<uint64_t>(std::max(0.0, layer->m_gameState.m_levelTime) * rate);
+    }
+
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
         return playerOffset + static_cast<size_t>(button) - 1;
@@ -245,10 +250,9 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             }
             auto& replay = *session->playback;
             while (session->nextFix < replay.frameFixes.size() &&
-                   replay.frameFixes[session->nextFix].afterTick == session->tick) {
+                   replay.frameFixes[session->nextFix].afterTick <= session->tick) {
                 applyFix(layer, replay.frameFixes[session->nextFix++]);
             }
-            session->tick++;
             if (session->tick >= replay.tickCount) {
                 toasty::engine::stopPlayback();
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
@@ -261,7 +265,6 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                     captureFix(*session, layer->m_player2, InputPlayer::Player2);
                 }
             }
-            session->tick++;
         }
     }
 
@@ -276,6 +279,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
         session->processingTick = true;
         toasty::engine::realignPlayback(PlayLayer::get());
+        session->tick = derivedTick(this);
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         this->closeTick(session, PlayLayer::get(), isHalfTick);
@@ -297,6 +301,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
         session->processingTick = true;
         toasty::engine::realignPlayback(PlayLayer::get());
+        session->tick = derivedTick(this);
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
         this->closeTick(session, PlayLayer::get(), false);
