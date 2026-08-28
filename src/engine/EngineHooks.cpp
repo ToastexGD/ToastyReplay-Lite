@@ -235,7 +235,10 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         }
     }
 
-    void closeTick(Session* session, PlayLayer* layer) {
+    void closeTick(Session* session, PlayLayer* layer, bool isHalfTick) {
+        if (isHalfTick) {
+            return;
+        }
         if (session->mode == Mode::Play && session->playback) {
             if (session->playbackHold) {
                 return;
@@ -275,7 +278,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         toasty::engine::realignPlayback(PlayLayer::get());
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-        this->closeTick(session, PlayLayer::get());
+        this->closeTick(session, PlayLayer::get(), isHalfTick);
         session->processingTick = false;
     }
 
@@ -296,7 +299,7 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         toasty::engine::realignPlayback(PlayLayer::get());
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-        this->closeTick(session, PlayLayer::get());
+        this->closeTick(session, PlayLayer::get(), false);
         session->processingTick = false;
     }
 #endif
