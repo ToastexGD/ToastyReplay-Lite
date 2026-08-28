@@ -30,6 +30,10 @@
 		"geode.node-ids": ">=v1.23.3"
 	},
 	"incompatibilities": {
+		"eclipse.eclipse-menu": {
+			"version": ">=v0.0.0",
+			"breaking": true
+		},
 		"toastexgd.toastyreplay": {
 			"version": ">=v0.0.0",
 			"breaking": true
