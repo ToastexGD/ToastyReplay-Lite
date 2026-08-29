@@ -27,8 +27,8 @@ class $modify(ToastyFirstRun, MenuLayer) {
         if (Mod::get()->setSavedValue<bool>("seen-open-hint-v2", true))
             return true;
 
-#if defined(GEODE_IS_IOS)
-        toasty::notifications::show("Open ToastyReplay-Lite from the pause menu.",
+#if defined(GEODE_IS_MOBILE)
+        toasty::notifications::show("Open ToastyReplay-Lite from the pause menu, or using the floating button",
                                     NotificationIcon::Info);
 #else
         toasty::notifications::show("Open ToastyReplay-Lite with the \"T\" keybind.",

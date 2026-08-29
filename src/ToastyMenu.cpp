@@ -261,7 +261,9 @@ static std::string modDevelopers() {
 ToastyMenu* ToastyMenu::create() {
     auto ret = new ToastyMenu();
     if (ret->init()) {
+        auto floatingButton = OverlayManager::get()->getChildByID("draggableMenuButton"_spr);
         ret->autorelease();
+        Mod::get()->setSavedValue<bool>("menu-open", true);
         return ret;
     }
     delete ret;
@@ -1719,6 +1721,7 @@ void ToastyMenu::onClose(CCObject* sender) {
             PlatformToolbox::hideCursor();
         }
     }
+    Mod::get()->setSavedValue<bool>("menu-open", false);
     Popup::onClose(sender);
 }
 
