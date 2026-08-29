@@ -1,3 +1,9 @@
+# v1.0.5
+- Fixed Android frame fixing to provide 100% accuracy.
+
+# v1.0.4
+- test build
+
 # v1.0.3
 - added android and ios support.
 - fixed the android 64 bit tick patch skipping the step count conversion, which made every tps above vanilla run too fast.
