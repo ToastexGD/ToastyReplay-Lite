@@ -1607,10 +1607,14 @@ void ToastyMenu::finishAddMacroFile(std::optional<std::filesystem::path> picked)
 }
 
 void ToastyMenu::onAddMacroFile(CCObject*) {
+#ifdef GEODE_IS_WINDOWS
+    geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory());
+    toasty::notifications::show("Drop .ttrl files into this folder", NotificationIcon::Info);
+#else
     utils::file::FilePickOptions options;
     options.filters.push_back({"ToastyReplay Macro", {"*.ttrl"}});
 
-    $async(options = std::move(options)) {
+    async::spawn([options = std::move(options)]() -> arc::Future<void> {
         auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
         queueInMainThread([result = std::move(result)]() mutable {
             if (result.isErr()) {
@@ -1620,7 +1624,8 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
             }
             ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
         });
-    };
+    });
+#endif
 }
 
 void ToastyMenu::onOpenFolder(CCObject*) {

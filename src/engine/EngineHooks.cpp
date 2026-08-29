@@ -222,15 +222,22 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             }
         }
         auto& replay = *session->playback;
+        std::array<bool, 6> changed = {};
         while (session->nextInput < replay.inputs.size() &&
                replay.inputs[session->nextInput].beforeTick <= session->tick) {
-            auto const& input = replay.inputs[session->nextInput++];
+            auto const& input = replay.inputs[session->nextInput];
+            auto index = heldIndex(input.button, input.player);
+            if (changed[index]) {
+                break;
+            }
+            ++session->nextInput;
+            changed[index] = true;
             session->acceptingPlaybackInput = true;
             this->handleButton(input.pressed,
                                static_cast<int>(input.button),
                                input.player == InputPlayer::Player1);
             session->acceptingPlaybackInput = false;
-            session->heldInputs[heldIndex(input.button, input.player)] = input.pressed;
+            session->heldInputs[index] = input.pressed;
         }
     }
 
