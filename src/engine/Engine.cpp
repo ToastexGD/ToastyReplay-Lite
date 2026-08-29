@@ -210,14 +210,6 @@ namespace toasty::engine {
         session->mode = Mode::Off;
         session->recording = {};
         auto startPos = startPosOf(layer);
-        if (startPos && !Mod::get()->getSettingValue<bool>("frame-fixes")) {
-            FLAlertLayer::create(
-                "Frame Fixes Required",
-                "Recording from a start position needs Frame Fixes enabled in Settings",
-                "OK")
-                ->show();
-            return false;
-        }
         if (toasty::seed::enabled()) {
             session->recording.seed = toasty::seed::value();
             toasty::seed::apply(layer, *session->recording.seed);

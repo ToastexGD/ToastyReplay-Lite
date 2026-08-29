@@ -155,10 +155,29 @@ static void resumeIfPaused() {
     }
 }
 
-static void startRecordingFromMenu() {
+static void beginRecordingFromMenu() {
     if (toasty::engine::startRecording()) {
         resumeIfPaused();
     }
+}
+
+static void startRecordingFromMenu() {
+    if (Mod::get()->setSavedValue<bool>("shown-record-warning", true)) {
+        beginRecordingFromMenu();
+        return;
+    }
+    createQuickPopup(
+        "ToastyReplay Lite",
+        "If you experience any issues with recording or playback, please join our "
+        "<cb>Discord</c> so we can troubleshoot and find a solution to your issue.",
+        "OK",
+        "Discord",
+        [](auto, bool discord) {
+            if (discord) {
+                geode::utils::web::openLinkInBrowser("https://discord.gg/7sugAx4byf");
+            }
+            beginRecordingFromMenu();
+        });
 }
 
 static void startReplayFromMenu(std::string name) {

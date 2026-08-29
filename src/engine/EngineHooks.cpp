@@ -24,7 +24,6 @@ using toasty::replay::InputButton;
 using toasty::replay::InputPlayer;
 
 namespace {
-    bool s_frameFixes = false;
     bool s_commandsHookAlive = false;
 
     size_t heldIndex(InputButton button, InputPlayer player) {
@@ -260,12 +259,10 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
         } else if (session->mode == Mode::Record) {
-            if (s_frameFixes) {
-                captureFix(*session, layer->m_player1, InputPlayer::Player1);
-                if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
-                    layer->m_player2 != layer->m_player1) {
-                    captureFix(*session, layer->m_player2, InputPlayer::Player2);
-                }
+            captureFix(*session, layer->m_player1, InputPlayer::Player1);
+            if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                layer->m_player2 != layer->m_player1) {
+                captureFix(*session, layer->m_player2, InputPlayer::Player2);
             }
             session->tick++;
         }
@@ -552,8 +549,3 @@ namespace toasty::engine {
         return static_cast<ToastyReplayPlayLayer*>(layer)->replaySession();
     }
 } // namespace toasty::engine
-
-$on_mod(Loaded) {
-    s_frameFixes = Mod::get()->getSettingValue<bool>("frame-fixes");
-    listenForSettingChanges<bool>("frame-fixes", [](bool value) { s_frameFixes = value; });
-}
