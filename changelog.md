@@ -1,3 +1,16 @@
+# v1.0.9
+- fix player button not closing endlevellayer when replaying
+- hide player button on playback
+
+# v1.0.8
+- Fix checkpoint x axis bug
+
+# v1.0.7
+- Add a file picker for importing macros
+
+# v1.0.6
+- Test build
+
 # v1.0.5
 - Fixed Android frame fixing to provide 100% accuracy.
 

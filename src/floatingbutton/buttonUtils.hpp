@@ -3,6 +3,7 @@
 #include <Geode/modify/MenuLayer.hpp>
 
 #include "../ToastyMenu.hpp"
+#include "../engine/Engine.hpp"
 
 using namespace geode::prelude;
 
@@ -21,11 +22,14 @@ void tryAddButton() {
     auto btn = amber::DraggableButton::create(
         sprite,
         [](amber::DraggableButton* sender) static {
+            if (toasty::engine::playing()) {
+                return;
+            }
             auto value = Mod::get()->getSavedValue<bool>("menu-open");
             if (!value) {
                 ToastyMenu::create()->show();
             }
-            
+
         }
     );
 

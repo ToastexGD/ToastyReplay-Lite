@@ -3,11 +3,23 @@
 #include <Geode/modify/MenuLayer.hpp>
 
 #include "../ToastyMenu.hpp"
+#include "../engine/Engine.hpp"
+#include "button.hpp"
 #include "buttonUtils.hpp"
 
 using namespace geode::prelude;
 
-
+namespace toasty::ui {
+    void refreshFloatingButton() {
+        auto ovM = OverlayManager::get();
+        if (!ovM) {
+            return;
+        }
+        if (auto button = ovM->getChildByID("draggableMenuButton"_spr)) {
+            button->setVisible(!toasty::engine::playing());
+        }
+    }
+} // namespace toasty::ui
 
 $on_mod(Loaded) {
     listenForSettingChanges<bool>("show-floating-button", [](bool value) {

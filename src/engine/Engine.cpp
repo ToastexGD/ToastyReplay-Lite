@@ -6,9 +6,11 @@
 #include "../replay/TtrlStorage.hpp"
 #include "../timing/TpsBypass.hpp"
 #include "../ui/Notifications.hpp"
+#include "../floatingbutton/button.hpp"
 #include "../ui/Watermark.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/EndLevelLayer.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <fmt/format.h>
 
@@ -51,6 +53,7 @@ namespace toasty::engine {
             session.recording = {};
             session.mode = Mode::Off;
             toasty::ui::refreshWatermark();
+            toasty::ui::refreshFloatingButton();
             return replay;
         }
 
@@ -77,10 +80,21 @@ namespace toasty::engine {
             }
             toasty::compat::endSession();
             toasty::ui::refreshWatermark();
+            toasty::ui::refreshFloatingButton();
             if (layer && session.changedTestMode) {
                 layer->m_isTestMode = session.previousTestMode;
             }
             session.changedTestMode = false;
+        }
+
+        EndLevelLayer* endScreenOf(PlayLayer* layer) {
+            if (auto found = layer->getChildByType<EndLevelLayer>(0)) {
+                return found;
+            }
+            if (auto scene = CCDirector::sharedDirector()->getRunningScene()) {
+                return scene->getChildByType<EndLevelLayer>(0);
+            }
+            return nullptr;
         }
 
         std::optional<float> startPosOf(PlayLayer* layer) {
@@ -225,6 +239,7 @@ namespace toasty::engine {
         session->mode = Mode::Record;
         resetAttempt(*session);
         toasty::ui::refreshWatermark();
+        toasty::ui::refreshFloatingButton();
         toasty::notifications::show("Recording started", NotificationIcon::Info);
         return true;
     }
@@ -239,6 +254,7 @@ namespace toasty::engine {
             session->recording = {};
             session->mode = Mode::Off;
             toasty::ui::refreshWatermark();
+            toasty::ui::refreshFloatingButton();
             return true;
         }
 
@@ -319,6 +335,9 @@ namespace toasty::engine {
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }
+        if (auto endScreen = endScreenOf(layer)) {
+            endScreen->onReplay(nullptr);
+        }
         layer->resetLevel();
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
@@ -327,6 +346,7 @@ namespace toasty::engine {
         resetAttempt(*session);
         setSelectedReplay(std::move(name));
         toasty::ui::refreshWatermark();
+        toasty::ui::refreshFloatingButton();
         log::info("Loaded replay {} with {} inputs", selectedReplay(), session->playback->inputs.size());
         toasty::notifications::show("Replay started", NotificationIcon::Info);
         return true;
