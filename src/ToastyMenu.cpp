@@ -5,6 +5,7 @@
 #include <fmt/ranges.h>
 #include <Geode/ui/ColorPickPopup.hpp>
 #include <Geode/utils/async.hpp>
+#include <Geode/utils/coro.hpp>
 #include <Geode/utils/web.hpp>
 #include "engine/Engine.hpp"
 #include "engine/RandomSeed.hpp"
@@ -154,10 +155,29 @@ static void resumeIfPaused() {
     }
 }
 
-static void startRecordingFromMenu() {
+static void beginRecordingFromMenu() {
     if (toasty::engine::startRecording()) {
         resumeIfPaused();
     }
+}
+
+static void startRecordingFromMenu() {
+    if (Mod::get()->setSavedValue<bool>("shown-record-warning", true)) {
+        beginRecordingFromMenu();
+        return;
+    }
+    createQuickPopup(
+        "ToastyReplay Lite",
+        "If you experience any issues with recording or playback, please join our "
+        "<cb>Discord</c> so we can troubleshoot and find a solution to your issue.",
+        "OK",
+        "Discord",
+        [](auto, bool discord) {
+            if (discord) {
+                geode::utils::web::openLinkInBrowser("https://discord.gg/7sugAx4byf");
+            }
+            beginRecordingFromMenu();
+        });
 }
 
 static void startReplayFromMenu(std::string name) {
@@ -1608,6 +1628,10 @@ void ToastyMenu::finishAddMacroFile(std::optional<std::filesystem::path> picked)
 }
 
 void ToastyMenu::onAddMacroFile(CCObject*) {
+#ifdef GEODE_IS_WINDOWS
+    geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory());
+    toasty::notifications::show("Drop .ttrl files into this folder", NotificationIcon::Info);
+#else
     utils::file::FilePickOptions options;
     options.filters.push_back({"ToastyReplay Macro", {"*.ttrl"}});
 
@@ -1622,6 +1646,7 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
             ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
         });
     });
+#endif
 }
 
 void ToastyMenu::onOpenFolder(CCObject*) {

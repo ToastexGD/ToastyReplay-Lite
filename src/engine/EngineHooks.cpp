@@ -2,7 +2,6 @@
 #include "RandomSeed.hpp"
 
 #include "../replay/TtrlCodec.hpp"
-#include "../timing/TpsBypass.hpp"
 #include "../ui/Notifications.hpp"
 
 #include <Geode/Geode.hpp>
@@ -25,13 +24,7 @@ using toasty::replay::InputButton;
 using toasty::replay::InputPlayer;
 
 namespace {
-    bool s_frameFixes = false;
     bool s_commandsHookAlive = false;
-
-    uint64_t derivedTick(GJBaseGameLayer* layer) {
-        auto rate = static_cast<double>(toasty::tps::effectiveRate());
-        return static_cast<uint64_t>(std::max(0.0, layer->m_gameState.m_levelTime) * rate);
-    }
 
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
@@ -228,15 +221,22 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
             }
         }
         auto& replay = *session->playback;
+        std::array<bool, 6> changed = {};
         while (session->nextInput < replay.inputs.size() &&
                replay.inputs[session->nextInput].beforeTick <= session->tick) {
-            auto const& input = replay.inputs[session->nextInput++];
+            auto const& input = replay.inputs[session->nextInput];
+            auto index = heldIndex(input.button, input.player);
+            if (changed[index]) {
+                break;
+            }
+            ++session->nextInput;
+            changed[index] = true;
             session->acceptingPlaybackInput = true;
             this->handleButton(input.pressed,
                                static_cast<int>(input.button),
                                input.player == InputPlayer::Player1);
             session->acceptingPlaybackInput = false;
-            session->heldInputs[heldIndex(input.button, input.player)] = input.pressed;
+            session->heldInputs[index] = input.pressed;
         }
     }
 
@@ -253,18 +253,18 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                    replay.frameFixes[session->nextFix].afterTick <= session->tick) {
                 applyFix(layer, replay.frameFixes[session->nextFix++]);
             }
+            session->tick++;
             if (session->tick >= replay.tickCount) {
                 toasty::engine::stopPlayback();
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
         } else if (session->mode == Mode::Record) {
-            if (s_frameFixes) {
-                captureFix(*session, layer->m_player1, InputPlayer::Player1);
-                if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
-                    layer->m_player2 != layer->m_player1) {
-                    captureFix(*session, layer->m_player2, InputPlayer::Player2);
-                }
+            captureFix(*session, layer->m_player1, InputPlayer::Player1);
+            if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                layer->m_player2 != layer->m_player1) {
+                captureFix(*session, layer->m_player2, InputPlayer::Player2);
             }
+            session->tick++;
         }
     }
 
@@ -279,7 +279,6 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
         session->processingTick = true;
         toasty::engine::realignPlayback(PlayLayer::get());
-        session->tick = derivedTick(this);
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         this->closeTick(session, PlayLayer::get(), isHalfTick);
@@ -301,7 +300,6 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
 
         session->processingTick = true;
         toasty::engine::realignPlayback(PlayLayer::get());
-        session->tick = derivedTick(this);
         this->feedPlaybackInputs(session);
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
         this->closeTick(session, PlayLayer::get(), false);
@@ -551,8 +549,3 @@ namespace toasty::engine {
         return static_cast<ToastyReplayPlayLayer*>(layer)->replaySession();
     }
 } // namespace toasty::engine
-
-$on_mod(Loaded) {
-    s_frameFixes = Mod::get()->getSettingValue<bool>("frame-fixes");
-    listenForSettingChanges<bool>("frame-fixes", [](bool value) { s_frameFixes = value; });
-}

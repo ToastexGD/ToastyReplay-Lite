@@ -7,7 +7,7 @@
 	},
 	"id": "toastexgd.toastyreplay-lite",
 	"name": "ToastyReplay-Lite",
-	"version": "v1.0.4",
+	"version": "v1.0.6",
 	"developers": [
 		"Toastexgd",
 		"Slideglide",
@@ -55,12 +55,6 @@
 			"name": "Disable CBF/CBS While Recording",
 			"description": "Turn off Click Between Frames and Click Between Steps while recording or playing a replay, then restore them afterward.",
 			"default": true
-		},
-		"frame-fixes": {
-			"type": "bool",
-			"name": "Frame Fixes",
-			"description": "Record and apply player position fixes after each physics tick.",
-			"default": false
 		},
 		"watermark": {
 			"type": "bool",
