@@ -230,6 +230,9 @@ namespace toasty::engine {
             session->recording.seed = toasty::seed::value();
             toasty::seed::apply(layer, *session->recording.seed);
         }
+        if (auto endScreen = endScreenOf(layer)) {
+            endScreen->onReplay(nullptr);
+        }
         layer->resetLevel();
         if (session->recording.seed) {
             toasty::seed::apply(layer, *session->recording.seed);

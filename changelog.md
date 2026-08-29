@@ -1,3 +1,8 @@
+# v1.0.10
+- fix the record button not closing endlevellayer
+- hide the floating button outside of menu layers
+- remove the box behind the macro info text
+
 # v1.0.9
 - fix player button not closing endlevellayer when replaying
 - hide player button on playback

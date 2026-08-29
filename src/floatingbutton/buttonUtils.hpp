@@ -4,6 +4,7 @@
 
 #include "../ToastyMenu.hpp"
 #include "../engine/Engine.hpp"
+#include "button.hpp"
 
 using namespace geode::prelude;
 
@@ -76,6 +77,8 @@ void tryAddButton() {
     if (!btn->setArea(amber::DraggableButton::Area::Screen)) {
         log::warn("Failed to set area for a button!");
     }
+
+    toasty::ui::refreshFloatingButton();
 
 }
 
