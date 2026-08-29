@@ -299,6 +299,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         size_t nextInput = 0;
         size_t nextFix = 0;
         std::array<bool, 6> heldInputs = {};
+        bool committed = false;
     };
 
     struct Fields {
@@ -352,18 +353,36 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         rewind(fields->session);
     }
 
+    PracticeCheckpoint snapshotCheckpoint() {
+        auto fields = m_fields.self();
+        return {
+            .tick = fields->session.tick,
+            .rngState = GameToolbox::getfast_srand(),
+            .nextInput = fields->session.nextInput,
+            .nextFix = fields->session.nextFix,
+            .heldInputs = fields->session.heldInputs,
+        };
+    }
+
+    CheckpointObject* createCheckpoint() {
+        auto checkpoint = PlayLayer::createCheckpoint();
+        if (checkpoint) {
+            m_fields->checkpoints[checkpoint] = this->snapshotCheckpoint();
+        }
+        return checkpoint;
+    }
+
     void storeCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::storeCheckpoint(checkpoint);
-        auto fields = m_fields.self();
-        if (checkpoint) {
-            fields->checkpoints[checkpoint] = {
-                .tick = fields->session.tick,
-                .rngState = GameToolbox::getfast_srand(),
-                .nextInput = fields->session.nextInput,
-                .nextFix = fields->session.nextFix,
-                .heldInputs = fields->session.heldInputs,
-            };
+        if (!checkpoint) {
+            return;
         }
+        auto fields = m_fields.self();
+        auto found = fields->checkpoints.find(checkpoint);
+        if (found == fields->checkpoints.end()) {
+            found = fields->checkpoints.emplace(checkpoint, this->snapshotCheckpoint()).first;
+        }
+        found->second.committed = true;
     }
 
     void loadFromCheckpoint(CheckpointObject* checkpoint) {
@@ -472,7 +491,8 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         PlayLayer::removeCheckpoint(first);
         auto fields = m_fields.self();
         for (auto it = fields->checkpoints.begin(); it != fields->checkpoints.end();) {
-            if (!m_checkpointArray || !m_checkpointArray->containsObject(it->first)) {
+            if (it->second.committed &&
+                (!m_checkpointArray || !m_checkpointArray->containsObject(it->first))) {
                 it = fields->checkpoints.erase(it);
             } else {
                 ++it;
