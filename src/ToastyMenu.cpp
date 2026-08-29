@@ -6,7 +6,6 @@
 #include <Geode/binding/LevelEditorLayer.hpp>
 #include <Geode/ui/ColorPickPopup.hpp>
 #include <Geode/utils/async.hpp>
-#include <Geode/utils/coro.hpp>
 #include <Geode/utils/web.hpp>
 #include "engine/Engine.hpp"
 #include "engine/RandomSeed.hpp"
@@ -1644,26 +1643,22 @@ void ToastyMenu::finishAddMacroFile(std::optional<std::filesystem::path> picked)
         NotificationIcon::Success);
 }
 
+static arc::Future<void> pickMacroFile(utils::file::FilePickOptions options) {
+    auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
+    queueInMainThread([result = std::move(result)]() mutable {
+        if (result.isErr()) {
+            toasty::notifications::show("Unable to open the file picker", NotificationIcon::Error);
+            return;
+        }
+        ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
+    });
+}
+
 void ToastyMenu::onAddMacroFile(CCObject*) {
-#ifdef GEODE_IS_WINDOWS
-    geode::utils::file::openFolder(toasty::replay::ttrl::defaultReplayDirectory());
-    toasty::notifications::show("Drop .ttrl files into this folder", NotificationIcon::Info);
-#else
     utils::file::FilePickOptions options;
     options.filters.push_back({"ToastyReplay Macro", {"*.ttrl"}});
 
-    async::spawn([options = std::move(options)]() -> arc::Future<void> {
-        auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
-        queueInMainThread([result = std::move(result)]() mutable {
-            if (result.isErr()) {
-                toasty::notifications::show("Unable to open the file picker",
-                                            NotificationIcon::Error);
-                return;
-            }
-            ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
-        });
-    });
-#endif
+    async::spawn(pickMacroFile(std::move(options)));
 }
 
 void ToastyMenu::onOpenFolder(CCObject*) {

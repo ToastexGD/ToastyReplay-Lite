@@ -112,7 +112,6 @@ class ToastyMenu : public geode::Popup {
     void onReplayMacro(cocos2d::CCObject* sender);
     void onRenameMacro(cocos2d::CCObject* sender);
     void onDeleteMacro(cocos2d::CCObject* sender);
-    static void finishAddMacroFile(std::optional<std::filesystem::path> picked);
     void onAddMacroFile(cocos2d::CCObject* sender);
     void onOpenFolder(cocos2d::CCObject* sender);
     void onSocialLink(cocos2d::CCObject* sender);
@@ -126,6 +125,7 @@ class ToastyMenu : public geode::Popup {
     void ccTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
 
   public:
+    static void finishAddMacroFile(std::optional<std::filesystem::path> picked);
     static ToastyMenu* create();
     static bool isOpen();
     static bool handleKey(cocos2d::enumKeyCodes key, bool down, bool repeat);
