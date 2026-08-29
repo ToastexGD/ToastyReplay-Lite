@@ -1612,12 +1612,14 @@ void ToastyMenu::onAddMacroFile(CCObject*) {
 
     $async(options = std::move(options)) {
         auto result = co_await utils::file::pick(utils::file::PickMode::OpenFile, options);
-        if (result.isErr()) {
-            toasty::notifications::show("Unable to open the file picker",
-                                        NotificationIcon::Error);
-            co_return;
-        }
-        ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
+        queueInMainThread([result = std::move(result)]() mutable {
+            if (result.isErr()) {
+                toasty::notifications::show("Unable to open the file picker",
+                                            NotificationIcon::Error);
+                return;
+            }
+            ToastyMenu::finishAddMacroFile(std::move(result).unwrap());
+        });
     };
 }
 
