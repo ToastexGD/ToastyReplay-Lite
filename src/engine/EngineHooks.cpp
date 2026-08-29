@@ -24,8 +24,6 @@ using toasty::replay::InputButton;
 using toasty::replay::InputPlayer;
 
 namespace {
-    bool s_commandsHookAlive = false;
-
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
         return playerOffset + static_cast<size_t>(button) - 1;
@@ -46,6 +44,7 @@ namespace {
         if (session.mode == Mode::Record) {
             session.recording.inputs.clear();
             session.recording.frameFixes.clear();
+            session.frameFixLimit = false;
         }
     }
 
@@ -104,8 +103,17 @@ namespace {
     }
 
     void captureFix(Session& session, PlayerObject* player, InputPlayer inputPlayer) {
-        if (!player || session.recording.frameFixes.size() >=
-                           toasty::replay::ttrl::codec::MaximumFrameFixes) {
+        if (!player) {
+            return;
+        }
+        if (session.recording.frameFixes.size() >=
+            toasty::replay::ttrl::codec::MaximumFrameFixes) {
+            if (!session.frameFixLimit) {
+                session.frameFixLimit = true;
+                toasty::notifications::show("Recording stopped, the macro is full",
+                                            NotificationIcon::Warning);
+                queueInMainThread([] { toasty::engine::stopRecording(true); });
+            }
             return;
         }
         uint16_t state = 0;
@@ -269,8 +277,6 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
     }
 
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
-        s_commandsHookAlive = true;
-
         auto session = this->tickSession();
         if (!session) {
             GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
@@ -284,28 +290,6 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
         this->closeTick(session, PlayLayer::get(), isHalfTick);
         session->processingTick = false;
     }
-
-#ifdef GEODE_IS_MACOS
-    void processQueuedButtons(float dt, bool clearInputQueue) {
-        if (s_commandsHookAlive || dt <= 0.f) {
-            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-            return;
-        }
-
-        auto session = this->tickSession();
-        if (!session) {
-            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-            return;
-        }
-
-        session->processingTick = true;
-        toasty::engine::realignPlayback(PlayLayer::get());
-        this->feedPlaybackInputs(session);
-        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-        this->closeTick(session, PlayLayer::get(), false);
-        session->processingTick = false;
-    }
-#endif
 };
 
 class $modify(ToastyReplayPlayLayer, PlayLayer) {
@@ -371,7 +355,7 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
     void storeCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::storeCheckpoint(checkpoint);
         auto fields = m_fields.self();
-        if (checkpoint && fields->session.mode != Mode::Off) {
+        if (checkpoint) {
             fields->checkpoints[checkpoint] = {
                 .tick = fields->session.tick,
                 .rngState = GameToolbox::getfast_srand(),
@@ -386,7 +370,10 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
         auto fields = m_fields.self();
         auto found = fields->checkpoints.find(checkpoint);
         if (fields->session.mode == Mode::Off || found == fields->checkpoints.end()) {
+            auto wasResetting = fields->session.resetting;
+            fields->session.resetting = true;
             PlayLayer::loadFromCheckpoint(checkpoint);
+            fields->session.resetting = wasResetting;
             return;
         }
 

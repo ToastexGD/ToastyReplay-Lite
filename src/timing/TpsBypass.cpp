@@ -6,7 +6,6 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -66,9 +65,6 @@ namespace toasty::tps {
     void setRate(int64_t value) {
         auto bounded = boundedRate(value);
         s_rate = bounded;
-        if (!s_replayRate) {
-            patch::setRate(bounded);
-        }
         if (Mod::get()->getSavedValue<int64_t>("tps-rate", Vanilla) != bounded) {
             Mod::get()->setSavedValue<int64_t>("tps-rate", bounded);
         }
@@ -79,9 +75,7 @@ namespace toasty::tps {
             return false;
         }
         auto bounded = boundedRate(value);
-        patch::setRate(bounded);
         if (!patch::setEnabled(true)) {
-            patch::setRate(s_rate);
             static_cast<void>(patch::setEnabled(s_enabled));
             return false;
         }
@@ -94,7 +88,6 @@ namespace toasty::tps {
             return;
         }
         s_replayRate.reset();
-        patch::setRate(s_rate);
         if (!patch::setEnabled(s_enabled)) {
             s_enabled = false;
             Mod::get()->setSavedValue<bool>("tps-bypass", false);
@@ -161,14 +154,7 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
         fields->delta = plan.delta;
         fields->customDelta = true;
         toasty::tps::patch::setExpected(plan.steps);
-#if defined(GEODE_IS_ARM_MAC)
-        auto loadingLayer = m_loadingLayer;
-        m_loadingLayer = std::bit_cast<GJGameLoadingLayer*>(1.0 / static_cast<double>(target));
-#endif
         GJBaseGameLayer::update(static_cast<float>(plan.delta));
-#if defined(GEODE_IS_ARM_MAC)
-        m_loadingLayer = loadingLayer;
-#endif
         fields->customDelta = false;
     }
 };
@@ -213,7 +199,6 @@ class $modify(ToastyTpsPlayLayer, PlayLayer) {
 $on_mod(Loaded) {
     toasty::tps::patch::initialize();
     s_rate = boundedRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Vanilla));
-    toasty::tps::patch::setRate(s_rate);
     s_enabled = Mod::get()->getSavedValue<bool>("tps-bypass", false);
     if (!toasty::tps::setEnabled(s_enabled)) {
         s_enabled = false;

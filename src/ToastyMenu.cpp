@@ -3,6 +3,7 @@
 #include <asp/fs.hpp>
 #include <asp/iter.hpp>
 #include <fmt/ranges.h>
+#include <Geode/binding/LevelEditorLayer.hpp>
 #include <Geode/ui/ColorPickPopup.hpp>
 #include <Geode/utils/async.hpp>
 #include <Geode/utils/coro.hpp>
@@ -153,6 +154,14 @@ static void resumeIfPaused() {
     if (auto pause = scene->getChildByType<PauseLayer>(0)) {
         pause->onResume(nullptr);
     }
+}
+
+static bool inLevel() {
+    return PlayLayer::get() != nullptr;
+}
+
+static bool inEditor() {
+    return LevelEditorLayer::get() != nullptr;
 }
 
 static void beginRecordingFromMenu() {
@@ -498,7 +507,7 @@ bool ToastyMenu::init() {
     // keybinds page
     {
         auto page = this->makePage(TabKeybinds).node;
-        this->addPageTitle(page, "Keybinds", "Windows & macOS");
+        this->addPageTitle(page, "Keybinds", "Windows");
 
         this->addPanel(page, {PANEL_X, (CONTENT_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, CONTENT_TOP - CONTENT_BOTTOM});
         auto scroll = this->addScroll(page, TabKeybinds, {ROW_X, CONTENT_BOTTOM + PANEL_PAD}, {ROW_W, CONTENT_TOP - CONTENT_BOTTOM - PANEL_PAD * 2.f});
@@ -508,7 +517,7 @@ bool ToastyMenu::init() {
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Record", "key-record", KEY_F1));
         scroll->m_contentLayer->addChild(this->makeKeybindRow("Replay", "key-replay", KEY_F2));
         scroll->m_contentLayer->addChild(
-            this->makeKeybindRow("Speedhack", "key-speedhack", KEY_Shift));
+            this->makeKeybindRow("Speedhack", "key-speedhack", KEY_F5));
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
         scroll->m_contentLayer->addChild(
@@ -1181,6 +1190,10 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
         return true;
     }
 
+    if (inEditor()) {
+        return false;
+    }
+
     auto openKey = Mod::get()->getSavedValue<int>("key-open-menu", static_cast<int>(KEY_T));
     if (down && !repeat && static_cast<int>(key) == openKey) {
         if (s_instance)
@@ -1191,7 +1204,7 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     }
 
     auto stepKey = Mod::get()->getSavedValue<int>("key-frame-step", static_cast<int>(KEY_F3));
-    if (static_cast<int>(key) == stepKey) {
+    if (inLevel() && static_cast<int>(key) == stepKey) {
         if (down && !repeat) {
             toasty::stepper::stepOnce();
             toasty::stepper::setKeyHeld(true);
@@ -1202,6 +1215,19 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     }
 
     if (!down || repeat) {
+        return false;
+    }
+
+    auto speedKey = Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_F5));
+    if (static_cast<int>(key) == speedKey) {
+        toasty::speedhack::setEnabled(!toasty::speedhack::enabled());
+        if (s_instance && s_instance->m_speedToggle) {
+            s_instance->m_speedToggle->toggle(toasty::speedhack::enabled());
+        }
+        return true;
+    }
+
+    if (!inLevel()) {
         return false;
     }
 
@@ -1226,15 +1252,6 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
     if (static_cast<int>(key) == stepperKey) {
         toasty::stepper::setEnabled(!toasty::stepper::enabled());
         toasty::ui::refreshStepperButtons();
-        return true;
-    }
-
-    auto speedKey = Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_Shift));
-    if (static_cast<int>(key) == speedKey) {
-        toasty::speedhack::setEnabled(!toasty::speedhack::enabled());
-        if (s_instance && s_instance->m_speedToggle) {
-            s_instance->m_speedToggle->toggle(toasty::speedhack::enabled());
-        }
         return true;
     }
 

@@ -19,6 +19,16 @@ $on_mod(Loaded) {
     }
 }
 
+$on_mod(Loaded) {
+    if (Mod::get()->setSavedValue<bool>("migrated-speedhack-key", true))
+        return;
+
+    if (Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_F5)) ==
+        static_cast<int>(KEY_Shift)) {
+        Mod::get()->setSavedValue<int>("key-speedhack", static_cast<int>(KEY_F5));
+    }
+}
+
 class $modify(ToastyFirstRun, MenuLayer) {
     bool init() {
         if (!MenuLayer::init())

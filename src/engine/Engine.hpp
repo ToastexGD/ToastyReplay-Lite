@@ -39,6 +39,7 @@ namespace toasty::engine {
         std::array<bool, 6> playbackSeekHeld = {};
         float playbackAlignedStart = 0.f;
         bool pendingHeld = false;
+        bool frameFixLimit = false;
         bool previousTestMode = false;
         bool changedTestMode = false;
         bool tpsOverride = false;

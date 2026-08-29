@@ -36,6 +36,7 @@ namespace toasty::engine {
             if (session.mode == Mode::Record) {
                 session.recording.inputs.clear();
                 session.recording.frameFixes.clear();
+                session.frameFixLimit = false;
             }
         }
 
@@ -209,6 +210,7 @@ namespace toasty::engine {
         toasty::compat::beginSession();
         session->mode = Mode::Off;
         session->recording = {};
+        session->tick = 0;
         auto startPos = startPosOf(layer);
         if (toasty::seed::enabled()) {
             session->recording.seed = toasty::seed::value();
@@ -289,9 +291,9 @@ namespace toasty::engine {
         log::info("Replay start {}, level start {}", recordedStart, currentStart);
 
         if (!alignPlayback(*session, replay, currentStart)) {
-            FLAlertLayer::create("Frame Fixes Required",
-                                 "Playing from a later start position needs a macro recorded "
-                                 "with Frame Fixes enabled",
+            FLAlertLayer::create("Start Position Mismatch",
+                                 "This macro never reaches the current start position. "
+                                 "Record it again from this start position",
                                  "OK")
                 ->show();
             return false;

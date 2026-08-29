@@ -15,7 +15,7 @@
 #include <dlfcn.h>
 #endif
 
-#if defined(GEODE_IS_MACOS) || defined(GEODE_IS_IOS)
+#if defined(GEODE_IS_IOS)
 #include <mach-o/loader.h>
 #endif
 
@@ -30,10 +30,8 @@ namespace {
 #endif
 
     alignas(8) ExpectedType s_expected = static_cast<ExpectedType>(1);
-    alignas(8) double s_tickDelta = 1.0 / 240.0;
     ExpectedType* s_expectedTarget = &s_expected;
     Patch* s_expectedPatch = nullptr;
-    Patch* s_deltaPatch = nullptr;
     bool s_initialized = false;
     bool s_available = false;
     bool s_staticPatch = false;
@@ -69,7 +67,7 @@ namespace {
         return Mod::get()->patch(reinterpret_cast<void*>(address), std::move(bytes));
     }
 
-#if defined(GEODE_IS_MACOS) || defined(GEODE_IS_IOS)
+#if defined(GEODE_IS_IOS)
     Result<std::pair<uint8_t const*, size_t>> textSegment() {
         auto header = reinterpret_cast<mach_header_64 const*>(geode::base::get());
         if (!header || header->magic != MH_MAGIC_64)
@@ -116,7 +114,7 @@ namespace {
         if (!function)
             return Err("GJBaseGameLayer::update could not be resolved");
         return Ok(std::make_pair(function, size_t(0x500)));
-#elif defined(GEODE_IS_MACOS) || defined(GEODE_IS_IOS)
+#elif defined(GEODE_IS_IOS)
         return textSegment();
 #else
         return Err("unsupported platform");
@@ -160,7 +158,7 @@ namespace {
         appendThumbMove(bytes, 0xf240, 1, static_cast<uint16_t>(target));
         appendThumbMove(bytes, 0xf2c0, 1, static_cast<uint16_t>(target >> 16));
         bytes.insert(bytes.end(), {0x08, 0x68, 0x00, 0xbf});
-#elif defined(GEODE_IS_IOS) || defined(GEODE_IS_ARM_MAC)
+#elif defined(GEODE_IS_IOS)
         static constexpr std::array<int16_t, 12> signature = {
             0x01, 0x10, 0x2e, 0x1e, 0x00, 0x20, 0x21, 0x1e, 0x20, 0xac, 0x20, 0x1e};
         address = findPattern(region.first, region.second, {signature, 0});
@@ -170,79 +168,12 @@ namespace {
         append32(bytes, 0xbd400120);
         while (bytes.size() < 40)
             append32(bytes, 0xd503201f);
-#elif defined(GEODE_IS_INTEL_MAC)
-        static constexpr std::array<int16_t, 18> signature = {0x0f,
-                                                              0x28,
-                                                              -1,
-                                                              0xf3,
-                                                              0x0f,
-                                                              0x5d,
-                                                              0x83,
-                                                              -1,
-                                                              -1,
-                                                              -1,
-                                                              -1,
-                                                              0xf3,
-                                                              0x0f,
-                                                              -1,
-                                                              -1,
-                                                              0xf2,
-                                                              0x0f,
-                                                              0x10};
-        address = findPattern(region.first, region.second, {signature, 0});
-        if (!address)
-            return Err("Intel Mac 2.2081 tick signature was not found");
-        bytes = {0x48, 0xb8};
-        append64(bytes, reinterpret_cast<uintptr_t>(s_expectedTarget));
-        bytes.insert(bytes.end(), {0xf3, 0x0f, 0x10, 0x00});
-        appendRelativeJump(bytes, address, address + 0x49);
 #else
         return Err("unsupported platform");
 #endif
 
         return createPatch(address, std::move(bytes));
     }
-
-#if defined(GEODE_IS_MACOS)
-    Result<Patch*> createDeltaPatch() {
-#if defined(GEODE_IS_INTEL_MAC)
-        GEODE_UNWRAP_INTO(auto segment, textSegment());
-        auto needle = std::bit_cast<std::array<uint8_t, 8>>(1.0 / 240.0);
-        uintptr_t found = 0;
-
-        for (size_t offset = 0; offset + needle.size() <= segment.second; ++offset) {
-            if (std::memcmp(segment.first + offset, needle.data(), needle.size()) == 0) {
-                if (found)
-                    return Err("Intel Mac 240 Hz constant was not unique");
-                found = reinterpret_cast<uintptr_t>(segment.first + offset);
-            }
-        }
-
-        if (!found)
-            return Err("Intel Mac 240 Hz constant was not found");
-        auto value = geode::toBytes(s_tickDelta);
-        return createPatch(found, std::vector<uint8_t>(value.begin(), value.end()));
-#elif defined(GEODE_IS_ARM_MAC)
-        static constexpr std::array<int16_t, 8> signature = {
-            0xe9, 0xe3, 0x00, 0xb2, 0x29, 0xee, 0xe7, 0xf2};
-        GEODE_UNWRAP_INTO(auto segment, textSegment());
-        auto address = findPattern(segment.first, segment.second, {signature, 0});
-        if (!address)
-            return Err("ARM Mac 240 Hz constant signature was not found");
-
-        auto fieldOffset = static_cast<uint32_t>(offsetof(GJBaseGameLayer, m_loadingLayer));
-        if ((fieldOffset & 7) != 0 || fieldOffset > 32760) {
-            return Err("ARM Mac delta storage offset was invalid");
-        }
-        std::vector<uint8_t> bytes;
-        append32(bytes, arm64Load64(9, 19, fieldOffset));
-        append32(bytes, 0xd503201f);
-        return createPatch(address, std::move(bytes));
-#else
-        return Err("unsupported Mac architecture");
-#endif
-    }
-#endif
 
     void fail(std::string message) {
         s_error = std::move(message);
@@ -285,20 +216,7 @@ namespace toasty::tps::patch {
         }
         s_expectedPatch = expected.unwrapOr(nullptr);
 
-#if defined(GEODE_IS_MACOS)
-        auto delta = createDeltaPatch();
-        if (!delta) {
-            if (auto result = s_expectedPatch->disable(); !result) {
-                log::error("Failed to roll back TPS tick patch: {}", result.unwrapErr());
-            }
-            fail(delta.unwrapErr());
-            return false;
-        }
-        s_deltaPatch = delta.unwrapOr(nullptr);
-#endif
-
         s_available = true;
-        setRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Vanilla));
         if (!setEnabled(Mod::get()->getSavedValue<bool>("tps-bypass", false))) {
             return false;
         }
@@ -329,28 +247,7 @@ namespace toasty::tps::patch {
             return false;
         }
 
-        if (s_deltaPatch) {
-            auto deltaResult = s_deltaPatch->toggle(enabled);
-            if (!deltaResult) {
-                (void)s_expectedPatch->disable();
-                fail(fmt::format("delta patch toggle failed: {}", deltaResult.unwrapErr()));
-                return false;
-            }
-        }
         return true;
-    }
-
-    void setRate(int64_t rate) {
-        auto bounded = std::clamp<int64_t>(rate, toasty::tps::Minimum, toasty::tps::Maximum);
-        s_tickDelta = 1.0 / static_cast<double>(bounded);
-
-#if defined(GEODE_IS_INTEL_MAC)
-        if (s_deltaPatch) {
-            auto result = s_deltaPatch->updateBytes(geode::toBytes(s_tickDelta));
-            if (!result)
-                fail(fmt::format("delta patch update failed: {}", result.unwrapErr()));
-        }
-#endif
     }
 
     void setExpected(uint32_t ticks) {

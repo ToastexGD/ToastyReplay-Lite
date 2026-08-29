@@ -16,7 +16,7 @@
 - Vanilla input recording and playback
 - Practice Fixes
 - Automatic replay saving
-- Optional frame fixes
+- Automatic frame fixes
 - TPS bypass
 - Speedhack
 - Replay-specific random seeds
@@ -32,7 +32,7 @@ ToastyReplay-Lite records vanilla inputs. Recording is NOT compatible with the f
 - Frame Extrapolation (Megahack) ~~Situational~~
 - ANY other TPS bypass, whether Silicate, Megahack, GDH, Eclipse, list goes on...
 
-Find advanced options in the geode settings for the more experienced botters.
+Frame fixes are always recorded. The geode settings cover the CBF and CBS handling and the watermark.
 
 ## <cs>Credits & Info</c>
 
