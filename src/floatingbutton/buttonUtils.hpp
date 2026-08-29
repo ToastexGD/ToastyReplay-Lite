@@ -1,6 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <fryy_55.amber/include/classes/DraggableButton.hpp>
-#include <Geode/Modify/MenuLayer.hpp>
+#include <Geode/modify/MenuLayer.hpp>
 
 #include "../ToastyMenu.hpp"
 
