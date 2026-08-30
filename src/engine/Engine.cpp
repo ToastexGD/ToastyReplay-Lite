@@ -12,6 +12,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/EndLevelLayer.hpp>
 #include <Geode/binding/PlayLayer.hpp>
+#include <Geode/loader/SettingV3.hpp>
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -146,6 +147,10 @@ namespace toasty::engine {
             return true;
         }
 
+        bool ignoreLevelChecks() {
+            return Mod::get()->getSettingValue<bool>("ignore-level-checks");
+        }
+
         std::optional<std::string> validateReplay(Session const& session, Replay& replay) {
             if (replay.mode == replay::PlayMode::Platformer && !session.platformer) {
                 return "The replay is for platformer mode";
@@ -153,15 +158,19 @@ namespace toasty::engine {
             if (replay.mode == replay::PlayMode::Normal && session.platformer) {
                 return "The replay is for normal mode";
             }
-            if (replay.levelId != 0 && session.levelId != 0 && replay.levelId != session.levelId) {
-                return "The replay is for a different level";
-            }
-            if (replay.levelRevision != 0 && replay.levelRevision != session.levelRevision) {
-                return "The replay is for a different level version";
-            }
-            if (replay.levelFingerprint != 0 &&
-                !replay::ttrl::matchesLevelFingerprint(replay.levelFingerprint, session.levelData)) {
-                return "The replay does not match this level";
+            if (!ignoreLevelChecks()) {
+                if (replay.levelId != 0 && session.levelId != 0 &&
+                    replay.levelId != session.levelId) {
+                    return "The replay is for a different level";
+                }
+                if (replay.levelRevision != 0 && replay.levelRevision != session.levelRevision) {
+                    return "The replay is for a different level version";
+                }
+                if (replay.levelFingerprint != 0 &&
+                    !replay::ttrl::matchesLevelFingerprint(replay.levelFingerprint,
+                                                           session.levelData)) {
+                    return "The replay does not match this level";
+                }
             }
             auto rate = replay.tps.normalized();
             if (!rate || rate->denominator != 1 || rate->numerator < toasty::tps::Minimum ||
@@ -309,7 +318,7 @@ namespace toasty::engine {
         auto currentStart = startPosOf(layer).value_or(0.f);
         log::info("Replay start {}, level start {}", recordedStart, currentStart);
 
-        if (!alignPlayback(*session, replay, currentStart)) {
+        if (!alignPlayback(*session, replay, currentStart) && !ignoreLevelChecks()) {
             FLAlertLayer::create("Start Position Mismatch",
                                  "This macro never reaches the current start position. "
                                  "Record it again from this start position",
@@ -400,3 +409,19 @@ namespace toasty::engine {
         return s_selectedReplay;
     }
 } // namespace toasty::engine
+
+$on_mod(Loaded) {
+    listenForSettingChanges<bool>("ignore-level-checks", [](bool value) {
+        if (!value) {
+            return;
+        }
+        if (Mod::get()->setSavedValue<bool>("shown-level-checks-warning", true)) {
+            return;
+        }
+        FLAlertLayer::create("Ignore Level Checks",
+                             "This may break or cause un-intended behavior from macros recorded "
+                             "using this feature.",
+                             "OK")
+            ->show();
+    });
+}

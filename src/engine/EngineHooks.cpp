@@ -24,6 +24,8 @@ using toasty::replay::InputButton;
 using toasty::replay::InputPlayer;
 
 namespace {
+    bool s_frameFixes = true;
+
     size_t heldIndex(InputButton button, InputPlayer player) {
         auto playerOffset = player == InputPlayer::Player2 ? 3 : 0;
         return playerOffset + static_cast<size_t>(button) - 1;
@@ -267,10 +269,12 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
         } else if (session->mode == Mode::Record) {
-            captureFix(*session, layer->m_player1, InputPlayer::Player1);
-            if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
-                layer->m_player2 != layer->m_player1) {
-                captureFix(*session, layer->m_player2, InputPlayer::Player2);
+            if (s_frameFixes) {
+                captureFix(*session, layer->m_player1, InputPlayer::Player1);
+                if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                    layer->m_player2 != layer->m_player1) {
+                    captureFix(*session, layer->m_player2, InputPlayer::Player2);
+                }
             }
             session->tick++;
         }
@@ -556,3 +560,10 @@ namespace toasty::engine {
         return static_cast<ToastyReplayPlayLayer*>(layer)->replaySession();
     }
 } // namespace toasty::engine
+
+#ifdef GEODE_IS_WINDOWS
+$on_mod(Loaded) {
+    s_frameFixes = Mod::get()->getSettingValue<bool>("frame-fixes");
+    listenForSettingChanges<bool>("frame-fixes", [](bool value) { s_frameFixes = value; });
+}
+#endif

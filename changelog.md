@@ -1,3 +1,7 @@
+# v1.0.12
+- add an ignore level checks setting so a macro can play in a copy of the level it was recorded on
+- bring back the frame fixes setting on windows, off by default, still always on for android and ios
+
 # v1.0.11
 - leave practice mode when a replay starts
 

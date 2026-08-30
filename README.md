@@ -16,7 +16,7 @@
 - Vanilla input recording and playback
 - Practice Fixes
 - Automatic replay saving
-- Automatic frame fixes
+- Automatic Frame Fixes on IOS and Android
 - TPS bypass
 - Speedhack
 - Replay-specific random seeds
