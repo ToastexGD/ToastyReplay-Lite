@@ -1,3 +1,6 @@
+# v1.0.11
+- leave practice mode when a replay starts
+
 # v1.0.10
 - fix the record button not closing endlevellayer
 - hide the floating button outside of menu layers

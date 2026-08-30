@@ -338,6 +338,9 @@ namespace toasty::engine {
         if (session->playback->seed) {
             toasty::seed::apply(layer, *session->playback->seed);
         }
+        if (layer->m_isPracticeMode) {
+            layer->togglePracticeMode(false);
+        }
         if (auto endScreen = endScreenOf(layer)) {
             endScreen->onReplay(nullptr);
         }
