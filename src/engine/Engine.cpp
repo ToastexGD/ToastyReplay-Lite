@@ -284,7 +284,13 @@ namespace toasty::engine {
         if (result.isErr()) {
             auto message = replay::ttrl::describe(result.unwrapErr());
             log::error("Failed to save replay: {}", message);
-            toasty::notifications::show("Failed to save replay", NotificationIcon::Error);
+            session->recording = std::move(replay);
+            session->mode = Mode::Record;
+            toasty::compat::beginSession();
+            toasty::ui::refreshWatermark();
+            toasty::ui::refreshFloatingButton();
+            toasty::notifications::show("Failed to save replay, still recording",
+                                        NotificationIcon::Error);
             return false;
         }
         auto name = result.unwrap();
