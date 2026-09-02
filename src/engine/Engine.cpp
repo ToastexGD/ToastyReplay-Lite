@@ -11,6 +11,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/EndLevelLayer.hpp>
+#include <Geode/binding/GameManager.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <fmt/format.h>
@@ -36,11 +37,20 @@ namespace toasty::engine {
             } else {
                 session.heldInputs.fill(false);
             }
+            session.playbackHold = session.playbackHoldArm;
             if (session.mode == Mode::Record) {
                 session.recording.inputs.clear();
                 session.recording.frameFixes.clear();
                 session.frameFixLimit = false;
             }
+        }
+        
+        bool controlsFlipped(Session const& session) {
+            if (session.platformer) {
+                return false;
+            }
+            auto manager = GameManager::get();
+            return manager && manager->getGameVariable("0010");
         }
 
         Replay finishRecording(Session& session) {
@@ -50,7 +60,15 @@ namespace toasty::engine {
             replay.levelId = session.levelId;
             replay.levelRevision = session.levelRevision;
             replay.levelFingerprint = replay::ttrl::fingerprintLevelData(session.levelData);
+            replay.controlFlip = controlsFlipped(session);
             replay.tickCount = std::max<uint64_t>(session.tick + (session.processingTick ? 1 : 0), 1);
+            if (!replay.inputs.empty()) {
+                replay.tickCount = std::max(replay.tickCount, replay.inputs.back().beforeTick + 1);
+            }
+            if (!replay.frameFixes.empty()) {
+                replay.tickCount =
+                    std::max(replay.tickCount, replay.frameFixes.back().afterTick + 1);
+            }
             session.recording = {};
             session.mode = Mode::Off;
             toasty::ui::refreshWatermark();
@@ -276,7 +294,13 @@ namespace toasty::engine {
         if (result.isErr()) {
             auto message = replay::ttrl::describe(result.unwrapErr());
             log::error("Failed to save replay: {}", message);
-            toasty::notifications::show("Failed to save replay", NotificationIcon::Error);
+            session->recording = std::move(replay);
+            session->mode = Mode::Record;
+            toasty::compat::beginSession();
+            toasty::ui::refreshWatermark();
+            toasty::ui::refreshFloatingButton();
+            toasty::notifications::show("Failed to save replay, still recording",
+                                        NotificationIcon::Error);
             return false;
         }
         auto name = result.unwrap();
@@ -313,6 +337,14 @@ namespace toasty::engine {
             log::error("Replay rejected: {}", *error);
             FLAlertLayer::create("Replay Rejected", *error, "OK")->show();
             return false;
+        }
+        if (replay.controlFlip && *replay.controlFlip != controlsFlipped(*session)) {
+            for (auto& input : replay.inputs) {
+                input.player = input.player == replay::InputPlayer::Player1
+                                   ? replay::InputPlayer::Player2
+                                   : replay::InputPlayer::Player1;
+            }
+            log::info("Swapped replay players for the flipped controls setting");
         }
         auto recordedStart = replay.startPos.value_or(0.f);
         auto currentStart = startPosOf(layer).value_or(0.f);

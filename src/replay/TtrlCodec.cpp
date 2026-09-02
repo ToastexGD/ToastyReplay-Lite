@@ -26,8 +26,9 @@ namespace toasty::replay::ttrl::codec {
     constexpr uint8_t PlatformerFlag = 4;
     constexpr uint8_t SeedFlag = 8;
     constexpr uint8_t StartPosFlag = 16;
+    constexpr uint8_t ControlFlipFlag = 32;
     constexpr uint8_t KnownFlags =
-        FrameFixFlag | InputChannelsFlag | PlatformerFlag | SeedFlag | StartPosFlag;
+        FrameFixFlag | InputChannelsFlag | PlatformerFlag | SeedFlag | StartPosFlag | ControlFlipFlag;
     constexpr uint8_t LegacyFrameFixSchema = 1;
     constexpr uint8_t PositionFrameFixSchema = 2;
     constexpr uint8_t FrameFixSchema = 3;
@@ -375,6 +376,8 @@ namespace toasty::replay::ttrl::codec {
             flags |= SeedFlag;
         if (replay.startPos)
             flags |= StartPosFlag;
+        if (replay.controlFlip)
+            flags |= ControlFlipFlag;
         bytes.push_back(flags);
         appendVarint(bytes, tps.numerator);
         appendVarint(bytes, tps.denominator);
@@ -387,6 +390,8 @@ namespace toasty::replay::ttrl::codec {
             appendVarint(bytes, *replay.seed);
         if (replay.startPos)
             appendFloat(bytes, *replay.startPos);
+        if (replay.controlFlip)
+            bytes.push_back(static_cast<uint8_t>(*replay.controlFlip));
         appendVarint(bytes, inputBytes.size());
         bytes.insert(bytes.end(), inputBytes.begin(), inputBytes.end());
 
@@ -479,6 +484,11 @@ namespace toasty::replay::ttrl::codec {
         if ((flags & StartPosFlag) != 0) {
             GEODE_UNWRAP_INTO(auto startPos, reader.readFloat());
             replay.startPos = startPos;
+        }
+
+        if ((flags & ControlFlipFlag) != 0) {
+            GEODE_UNWRAP_INTO(auto controlFlip, reader.readByte());
+            replay.controlFlip = controlFlip != 0;
         }
 
         GEODE_UNWRAP_INTO(auto inputSize, reader.readVarint());
