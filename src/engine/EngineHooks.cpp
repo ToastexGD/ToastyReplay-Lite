@@ -174,6 +174,11 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                                                      .button = inputButton,
                                                      .player = inputPlayer,
                                                      .pressed = down});
+            } else if (!session->frameFixLimit) {
+                session->frameFixLimit = true;
+                toasty::notifications::show("Recording stopped, the macro is full",
+                                            NotificationIcon::Warning);
+                queueInMainThread([] { toasty::engine::stopRecording(true); });
             }
         }
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
