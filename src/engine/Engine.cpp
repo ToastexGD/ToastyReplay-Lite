@@ -51,6 +51,13 @@ namespace toasty::engine {
             replay.levelRevision = session.levelRevision;
             replay.levelFingerprint = replay::ttrl::fingerprintLevelData(session.levelData);
             replay.tickCount = std::max<uint64_t>(session.tick + (session.processingTick ? 1 : 0), 1);
+            if (!replay.inputs.empty()) {
+                replay.tickCount = std::max(replay.tickCount, replay.inputs.back().beforeTick + 1);
+            }
+            if (!replay.frameFixes.empty()) {
+                replay.tickCount =
+                    std::max(replay.tickCount, replay.frameFixes.back().afterTick + 1);
+            }
             session.recording = {};
             session.mode = Mode::Off;
             toasty::ui::refreshWatermark();
