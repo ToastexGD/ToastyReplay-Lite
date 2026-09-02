@@ -304,35 +304,45 @@ bool ToastyMenu::init() {
 
     // main page
     {
+        struct ModeItem {
+            ZStringView name;
+            ZStringView sprite;
+            ZStringView id;
+        };
+
+        static const auto items = std::to_array<ModeItem>({
+            {"Disable", "GJ_button_04.png", "mode-disable"},
+            {"Record", "GJ_button_06.png", "mode-record"},
+            {"Play", "GJ_button_01.png", "mode-play"}
+        });
+
         auto [page, menu] = this->makePage(TabMain);
         this->addPageTitle(page, "Macro Controls", nullptr);
 
-        // disable, record, play, buttons in the "macro controlls"
-        const char* modeNames[3] = {"Disable", "Record", "Play"};
-        const char* modeTextures[3] = {"GJ_button_04.png", "GJ_button_06.png", "GJ_button_01.png"};
-        const char* modeIds[3] = {"mode-disable", "mode-record", "mode-play"};
-        for (int i = 0; i < 3; i++) {
+        for (size_t i = 0; i < items.size(); ++i) {
+            const auto& item = items[i];
+
             auto node = CCNode::create();
             node->setContentSize({98.f, 40.f});
 
-            auto bg = geode::NineSlice::create(modeTextures[i]);
+            auto bg = geode::NineSlice::create(item.sprite);
             bg->setContentSize(node->getContentSize());
             bg->setPosition({49.f, 20.f});
             node->addChild(bg);
             m_modeBgs[i] = bg;
 
-            auto label = Label::create(modeNames[i], "bigFont.fnt");
+            auto label = Label::create(item.name, "bigFont.fnt");
             label->setPosition({49.f, 20.f});
             label->setLimitLabelWidth(78.f, .5f, .1f);
             node->addChild(label);
             m_modeLabels[i] = label;
 
-            auto item =
+            auto menuItem =
                 CCMenuItemSpriteExtra::create(node, this, menu_selector(ToastyMenu::onMode));
-            item->setTag(i);
-            item->setID(modeIds[i]);
-            item->setPosition({PANEL_LEFT + 49.f + i * 108.f, MAIN_PANEL_TOP + GAP + 20.f});
-            menu->addChild(item);
+            menuItem->setTag(static_cast<int>(i));
+            menuItem->setID(item.id);
+            menuItem->setPosition({PANEL_LEFT + 49.f + i * 108.f, MAIN_PANEL_TOP + GAP + 20.f});
+            menu->addChild(menuItem);
         }
 
         this->addPanel(page, {PANEL_X, (MAIN_PANEL_TOP + CONTENT_BOTTOM) / 2.f}, {PANEL_W, MAIN_PANEL_TOP - CONTENT_BOTTOM});

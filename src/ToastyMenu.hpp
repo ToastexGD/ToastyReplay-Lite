@@ -36,11 +36,12 @@ class ToastyMenu : public geode::Popup {
         std::optional<float> startPos;
     };
     int m_tab = TabMain;
-    geode::NineSlice* m_modeBgs[3] = {};
-    geode::Label* m_modeLabels[3] = {};
-    geode::NineSlice* m_tabBgs[TabCount] = {};
-    cocos2d::CCNode* m_pages[TabCount] = {};
-    std::vector<cocos2d::CCLayer*> m_pageTouchNodes[TabCount];
+    // geode::NineSlice* m_modeBgs[3] = {};
+    std::array<geode::NineSlice*, 3> m_modeBgs{};
+    std::array<geode::Label*, 3> m_modeLabels{};
+    std::array<geode::NineSlice*, TabCount> m_tabBgs{};
+    std::array<cocos2d::CCNode*, TabCount> m_pages{};
+    std::array<std::vector<geode::Ref<cocos2d::CCLayer>>, TabCount> m_pageTouchNodes{};
     geode::ScrollLayer* m_macroScroll = nullptr;
     std::vector<std::string> m_macroNames;
     std::vector<geode::NineSlice*> m_macroRowBgs;
