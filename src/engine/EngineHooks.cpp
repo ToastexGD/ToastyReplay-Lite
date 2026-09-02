@@ -486,6 +486,11 @@ class $modify(ToastyReplayPlayLayer, PlayLayer) {
                                   .button = button,
                                   .player = player,
                                   .pressed = liveInputs[index]});
+            } else if (!fields->session.frameFixLimit) {
+                fields->session.frameFixLimit = true;
+                toasty::notifications::show("Recording stopped, the macro is full",
+                                            NotificationIcon::Warning);
+                queueInMainThread([] { toasty::engine::stopRecording(true); });
             }
             this->handleButton(liveInputs[index],
                                static_cast<int>(button),
