@@ -733,6 +733,7 @@ geode::NineSlice* ToastyMenu::addPanel(CCNode* page, CCPoint center, CCSize size
 ScrollLayer* ToastyMenu::addScroll(CCNode* page, int tab, CCPoint pos, CCSize size) {
     auto scroll = ScrollLayer::create(size);
     scroll->setPosition(pos);
+    scroll->enableScrollWheel();
     scroll->m_contentLayer->setLayout(ColumnLayout::create()
                                           ->setAxisReverse(true)
                                           ->setAxisAlignment(AxisAlignment::End)
