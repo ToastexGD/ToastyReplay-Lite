@@ -2,6 +2,7 @@
 #include "RandomSeed.hpp"
 
 #include "../replay/TtrlCodec.hpp"
+#include "../timing/FrameStepper.hpp"
 #include "../ui/Notifications.hpp"
 
 #include <Geode/Geode.hpp>
@@ -43,7 +44,7 @@ namespace {
             session.heldInputs.fill(false);
         }
         session.playbackHold = session.playbackHoldArm;
-        if (session.mode == Mode::Record) {
+        if (session.mode != Mode::Play) {
             session.recording.inputs.clear();
             session.recording.frameFixes.clear();
             session.frameFixLimit = false;
@@ -110,7 +111,7 @@ namespace {
         }
         if (session.recording.frameFixes.size() >=
             toasty::replay::ttrl::codec::MaximumFrameFixes) {
-            if (!session.frameFixLimit) {
+            if (session.mode == Mode::Record && !session.frameFixLimit) {
                 session.frameFixLimit = true;
                 toasty::notifications::show("Recording stopped, the macro is full",
                                             NotificationIcon::Warning);
@@ -274,12 +275,19 @@ class $modify(ToastyReplayGameLayer, GJBaseGameLayer) {
                 toasty::notifications::show("Replay finished", NotificationIcon::Success);
             }
         } else if (session->mode == Mode::Record) {
-            if (s_frameFixes) {
+            if (s_frameFixes || toasty::stepper::sessionOpen()) {
                 captureFix(*session, layer->m_player1, InputPlayer::Player1);
                 if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
                     layer->m_player2 != layer->m_player1) {
                     captureFix(*session, layer->m_player2, InputPlayer::Player2);
                 }
+            }
+            session->tick++;
+        } else if (toasty::stepper::sessionOpen()) {
+            captureFix(*session, layer->m_player1, InputPlayer::Player1);
+            if (layer->m_gameState.m_isDualMode && layer->m_player2 &&
+                layer->m_player2 != layer->m_player1) {
+                captureFix(*session, layer->m_player2, InputPlayer::Player2);
             }
             session->tick++;
         }
@@ -569,6 +577,7 @@ namespace toasty::engine {
         }
         return static_cast<ToastyReplayPlayLayer*>(layer)->replaySession();
     }
+
 } // namespace toasty::engine
 
 #ifdef GEODE_IS_WINDOWS

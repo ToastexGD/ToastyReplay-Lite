@@ -1,5 +1,6 @@
 #include "StepperButtons.hpp"
 
+#include "../engine/Engine.hpp"
 #include "../timing/FrameStepper.hpp"
 
 #include <Geode/Geode.hpp>
@@ -27,9 +28,22 @@ namespace toasty::ui {
             return;
         }
         auto menu = layer->getChildByIDRecursive("frame-stepper-menu"_spr);
-        if (menu) {
-            menu->setVisible(toasty::stepper::enabled() && stepperButtonsVisible());
+        if (!menu) {
+            return;
         }
+        menu->setVisible(toasty::stepper::sessionOpen() && stepperButtonsVisible());
+
+        if (auto pause = typeinfo_cast<CCMenuItemSpriteExtra*>(
+                menu->getChildByID("pause-stepper"_spr))) {
+            auto frame = toasty::stepper::paused() ? "GJ_playEditorBtn_001.png"
+                                                   : "GJ_pauseEditorBtn_001.png";
+            if (auto sprite = CCSprite::createWithSpriteFrameName(frame)) {
+                sprite->setScale(.5f);
+                pause->setNormalImage(sprite);
+                pause->updateSprite();
+            }
+        }
+
     }
 } // namespace toasty::ui
 
@@ -44,7 +58,25 @@ class $modify(StepperPauseLayer, PauseLayer) {
 class $modify(StepperPlayLayer, PlayLayer) {
     struct Fields {
         Ref<CCMenuItemSpriteExtra> stepButton;
+
     };
+
+    CCMenuItemSpriteExtra* addStepperButton(CCMenu* menu,
+                                            char const* frame,
+                                            bool flip,
+                                            std::string const& id,
+                                            SEL_MenuHandler handler) {
+        auto sprite = CCSprite::createWithSpriteFrameName(frame);
+        if (!sprite) {
+            return nullptr;
+        }
+        sprite->setFlipX(flip);
+        sprite->setScale(.5f);
+        auto button = CCMenuItemSpriteExtra::create(sprite, this, handler);
+        button->setID(id);
+        menu->addChild(button);
+        return button;
+    }
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
@@ -58,22 +90,31 @@ class $modify(StepperPlayLayer, PlayLayer) {
         menu->setPosition({0.f, 0.f});
         menu->setContentSize(winSize);
 
-        auto stepSprite = ButtonSprite::create("Step", "bigFont.fnt", "GJ_button_01.png", .8f);
-        stepSprite->setScale(.7f);
-        auto stepButton =
-            CCMenuItemSpriteExtra::create(stepSprite, this, menu_selector(StepperPlayLayer::onStep));
-        stepButton->setID("step"_spr);
-        stepButton->setPosition({winSize.width - 44.f, 34.f});
-        menu->addChild(stepButton);
-        m_fields->stepButton = stepButton;
+        auto pause = this->addStepperButton(menu,
+                                            "GJ_pauseEditorBtn_001.png",
+                                            false,
+                                            "pause-stepper"_spr,
+                                            menu_selector(StepperPlayLayer::onTogglePause));
+        auto stop = this->addStepperButton(menu,
+                                           "GJ_deleteSongBtn_001.png",
+                                           false,
+                                           "stop-stepper"_spr,
+                                           menu_selector(StepperPlayLayer::onStopStepper));
+        m_fields->stepButton = this->addStepperButton(menu,
+                                                      "GJ_arrow_01_001.png",
+                                                      true,
+                                                      "step"_spr,
+                                                      menu_selector(StepperPlayLayer::onStep));
 
-        if (auto stopSprite = CCSprite::createWithSpriteFrameName("GJ_backBtn_001.png")) {
-            stopSprite->setScale(.5f);
-            auto stopButton = CCMenuItemSpriteExtra::create(
-                stopSprite, this, menu_selector(StepperPlayLayer::onStopStepper));
-            stopButton->setID("stop-stepper"_spr);
-            stopButton->setPosition({winSize.width - 102.f, 34.f});
-            menu->addChild(stopButton);
+        auto edge = winSize.width - 14.f;
+        for (auto button : {m_fields->stepButton.data(), stop, pause}) {
+            if (!button) {
+                continue;
+            }
+            auto half = button->getScaledContentWidth() / 2.f;
+            edge -= half;
+            button->setPosition({edge, 30.f});
+            edge -= half + 4.f;
         }
 
         CCNode* host = m_uiLayer ? static_cast<CCNode*>(m_uiLayer) : static_cast<CCNode*>(this);
@@ -87,28 +128,34 @@ class $modify(StepperPlayLayer, PlayLayer) {
 
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
-        toasty::stepper::setEnabled(false);
+        toasty::stepper::closeSession();
         toasty::ui::refreshStepperButtons();
     }
 
     void onQuit() {
-        toasty::stepper::setEnabled(false);
+        toasty::stepper::closeSession();
         PlayLayer::onQuit();
     }
 
     void pollStepButton(float dt) {
         auto button = m_fields->stepButton;
         auto parent = button ? button->getParent() : nullptr;
-        toasty::stepper::setButtonHeld(button && parent && parent->isVisible() &&
-                                       button->isSelected());
+        auto shown = parent && parent->isVisible();
+        toasty::stepper::setButtonHeld(button && shown && button->isSelected());
+
     }
 
     void onStep(CCObject* sender) {
         toasty::stepper::stepOnce();
     }
 
+    void onTogglePause(CCObject* sender) {
+        toasty::stepper::setPaused(!toasty::stepper::paused());
+        toasty::ui::refreshStepperButtons();
+    }
+
     void onStopStepper(CCObject* sender) {
-        toasty::stepper::setEnabled(false);
+        toasty::stepper::closeSession();
         toasty::ui::refreshStepperButtons();
     }
 };

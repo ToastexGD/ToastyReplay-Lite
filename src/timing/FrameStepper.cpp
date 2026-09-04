@@ -15,6 +15,7 @@ namespace toasty::stepper {
         constexpr auto RepeatInterval = asp::time::Duration::fromMillis(110);
 
         bool s_enabled = false;
+        bool s_sessionOpen = false;
         bool s_keyHeld = false;
         bool s_buttonHeld = false;
         bool s_pausedMusic = false;
@@ -55,6 +56,31 @@ namespace toasty::stepper {
         if (Mod::get()->getSavedValue<bool>("frame-stepper", false) != value) {
             Mod::get()->setSavedValue<bool>("frame-stepper", value);
         }
+    }
+
+    bool sessionOpen() {
+        return s_sessionOpen;
+    }
+
+    void openSession() {
+        s_sessionOpen = true;
+        setEnabled(true);
+    }
+
+    void closeSession() {
+        s_sessionOpen = false;
+        setEnabled(false);
+    }
+
+    bool paused() {
+        return s_sessionOpen && !s_enabled;
+    }
+
+    void setPaused(bool value) {
+        if (!s_sessionOpen) {
+            return;
+        }
+        setEnabled(!value);
     }
 
     void syncMusic() {
@@ -115,10 +141,12 @@ namespace toasty::stepper {
         s_lastRepeat = now;
         return true;
     }
+
 } // namespace toasty::stepper
 
 $on_mod(Loaded) {
     using namespace toasty::stepper::detail;
 
     s_enabled = Mod::get()->getSavedValue<bool>("frame-stepper", false);
+    s_sessionOpen = s_enabled;
 }

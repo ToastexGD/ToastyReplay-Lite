@@ -117,13 +117,15 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
         auto fields = m_fields.self();
 
         if (toasty::stepper::freezes()) {
-            auto stepping = toasty::stepper::takeStep();
+            if (!toasty::stepper::takeStep()) {
+                return;
+            }
             auto stepRate = toasty::stepper::overridesTps() ? toasty::tps::Vanilla : activeRate();
             fields->planner.reset();
             fields->customDelta = false;
             if (toasty::tps::patch::interceptsTicks())
-                toasty::tps::patch::setExpected(stepping ? 1 : 0);
-            GJBaseGameLayer::update(stepping ? static_cast<float>(1.0 / stepRate) : 0.f);
+                toasty::tps::patch::setExpected(1);
+            GJBaseGameLayer::update(static_cast<float>(1.0 / stepRate));
             return;
         }
 

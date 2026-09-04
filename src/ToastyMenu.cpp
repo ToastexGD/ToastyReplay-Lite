@@ -529,6 +529,7 @@ bool ToastyMenu::init() {
             this->makeKeybindRow("Speedhack", "key-speedhack", KEY_F5));
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Frame Step", "key-frame-step", KEY_F3));
+
         scroll->m_contentLayer->addChild(
             this->makeKeybindRow("Toggle Stepper", "key-frame-stepper", KEY_F4));
 
@@ -1228,40 +1229,42 @@ bool ToastyMenu::handleKey(enumKeyCodes key, bool down, bool repeat) {
         return false;
     }
 
+    if (inLevel()) {
+        auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
+        if (static_cast<int>(key) == recordKey) {
+            if (toasty::engine::recording()) {
+                toasty::engine::stopRecording(true);
+            } else {
+                startRecordingFromMenu();
+            }
+            return true;
+        }
+
+        auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
+        if (static_cast<int>(key) == replayKey) {
+            toasty::engine::togglePlayback();
+            return true;
+        }
+
+        auto stepperKey =
+            Mod::get()->getSavedValue<int>("key-frame-stepper", static_cast<int>(KEY_F4));
+        if (static_cast<int>(key) == stepperKey) {
+            if (toasty::stepper::sessionOpen()) {
+                toasty::stepper::closeSession();
+            } else {
+                toasty::stepper::openSession();
+            }
+            toasty::ui::refreshStepperButtons();
+            return true;
+        }
+    }
+
     auto speedKey = Mod::get()->getSavedValue<int>("key-speedhack", static_cast<int>(KEY_F5));
     if (static_cast<int>(key) == speedKey) {
         toasty::speedhack::setEnabled(!toasty::speedhack::enabled());
         if (s_instance && s_instance->m_speedToggle) {
             s_instance->m_speedToggle->toggle(toasty::speedhack::enabled());
         }
-        return true;
-    }
-
-    if (!inLevel()) {
-        return false;
-    }
-
-    auto recordKey = Mod::get()->getSavedValue<int>("key-record", static_cast<int>(KEY_F1));
-    if (static_cast<int>(key) == recordKey) {
-        if (toasty::engine::recording()) {
-            toasty::engine::stopRecording(true);
-        } else {
-            startRecordingFromMenu();
-        }
-        return true;
-    }
-
-    auto replayKey = Mod::get()->getSavedValue<int>("key-replay", static_cast<int>(KEY_F2));
-    if (static_cast<int>(key) == replayKey) {
-        toasty::engine::togglePlayback();
-        return true;
-    }
-
-    auto stepperKey =
-        Mod::get()->getSavedValue<int>("key-frame-stepper", static_cast<int>(KEY_F4));
-    if (static_cast<int>(key) == stepperKey) {
-        toasty::stepper::setEnabled(!toasty::stepper::enabled());
-        toasty::ui::refreshStepperButtons();
         return true;
     }
 
@@ -1569,7 +1572,11 @@ void ToastyMenu::onTpsAdjust(CCObject* sender) {
 
 void ToastyMenu::onFrameStepperToggle(CCObject* sender) {
     auto toggle = static_cast<CCMenuItemToggler*>(sender);
-    toasty::stepper::setEnabled(!toggle->isToggled());
+    if (toggle->isToggled()) {
+        toasty::stepper::closeSession();
+    } else {
+        toasty::stepper::openSession();
+    }
     toasty::ui::refreshStepperButtons();
 }
 
