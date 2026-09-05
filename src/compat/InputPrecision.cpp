@@ -73,6 +73,22 @@ namespace toasty::compat {
         rememberSession();
     }
 
+    void syncSession() {
+        if (!s_active) {
+            return;
+        }
+        auto manager = GameManager::get();
+        auto layer = PlayLayer::get();
+        if ((manager && manager->getGameVariable(GameVar::ClickBetweenSteps)) ||
+            (layer && layer->m_clickBetweenSteps)) {
+            setClickBetweenSteps(false);
+        }
+        if (auto cbf = Loader::get()->getLoadedMod(CbfModId);
+            cbf && !cbf->getSettingValue<bool>(CbfDisableSetting)) {
+            cbf->setSettingValue<bool>(CbfDisableSetting, true);
+        }
+    }
+
     void endSession() {
         if (!s_active) {
             return;

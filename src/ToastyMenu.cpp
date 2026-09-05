@@ -933,8 +933,14 @@ CCNode* ToastyMenu::makeTpsRow() {
     m_tpsInput->setMaxCharCount(7);
     m_tpsInput->setScale(.55f);
     m_tpsInput->setPosition({194.f, 16.f});
-    m_tpsInput->setString(fmt::format("{}", toasty::tps::rate()));
+    m_tpsInput->setString(fmt::format("{}", toasty::engine::mode() == toasty::engine::Mode::Off
+                                             ? toasty::tps::rate()
+                                             : toasty::tps::effectiveRate()));
     m_tpsInput->setCallback([this](std::string const& value) {
+        if (toasty::engine::mode() != toasty::engine::Mode::Off) {
+            m_tpsInput->setString(fmt::format("{}", toasty::tps::effectiveRate()));
+            return;
+        }
         auto result = utils::numFromString<int64_t>(value);
         if (!result) {
             return;
@@ -1556,12 +1562,16 @@ void ToastyMenu::onTpsToggle(CCObject* sender) {
     auto toggle = static_cast<CCMenuItemToggler*>(sender);
     auto next = !toggle->isToggled();
     if (!toasty::tps::setEnabled(next)) {
-        toggle->toggle(false);
+        toggle->toggle(!toasty::tps::enabled());
         this->onTpsInfo(nullptr);
     }
 }
 
 void ToastyMenu::onTpsAdjust(CCObject* sender) {
+    if (toasty::engine::mode() != toasty::engine::Mode::Off) {
+        this->onTpsInfo(nullptr);
+        return;
+    }
     auto direction = static_cast<CCNode*>(sender)->getTag();
     auto next = std::clamp<int64_t>(toasty::tps::rate() + static_cast<int64_t>(direction) * 60,
                                     toasty::tps::Minimum,
@@ -1600,6 +1610,11 @@ void ToastyMenu::onNoclipOptions(CCObject*) {
 }
 
 void ToastyMenu::onTpsInfo(CCObject* sender) {
+    if (toasty::engine::mode() != toasty::engine::Mode::Off) {
+        FLAlertLayer::create("TPS Locked", "Stop recording or playback before changing TPS", "OK")
+            ->show();
+        return;
+    }
     if (!toasty::tps::available()) {
         FLAlertLayer::create("TPS Bypass Unavailable", toasty::tps::unavailableReason(), "OK")
             ->show();

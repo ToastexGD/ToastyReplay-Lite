@@ -2,6 +2,8 @@
 #include "FrameStepper.hpp"
 #include "StepPlanner.hpp"
 #include "TpsPatch.hpp"
+#include "../compat/InputPrecision.hpp"
+#include "../engine/Engine.hpp"
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -43,6 +45,8 @@ namespace toasty::tps {
     }
 
     bool setEnabled(bool value) {
+        if (toasty::engine::mode() != toasty::engine::Mode::Off)
+            return value == s_enabled;
         if (value && !patch::available())
             return false;
         if (!s_replayRate && !patch::setEnabled(value))
@@ -63,6 +67,8 @@ namespace toasty::tps {
     }
 
     void setRate(int64_t value) {
+        if (toasty::engine::mode() != toasty::engine::Mode::Off)
+            return;
         auto bounded = boundedRate(value);
         s_rate = bounded;
         if (Mod::get()->getSavedValue<int64_t>("tps-rate", Vanilla) != bounded) {
@@ -114,6 +120,7 @@ class $modify(ToastyTpsGameLayer, GJBaseGameLayer) {
     }
 
     void update(float dt) override {
+        toasty::compat::syncSession();
         auto fields = m_fields.self();
 
         if (toasty::stepper::freezes()) {
@@ -202,7 +209,7 @@ $on_mod(Loaded) {
     toasty::tps::patch::initialize();
     s_rate = boundedRate(Mod::get()->getSavedValue<int64_t>("tps-rate", toasty::tps::Vanilla));
     s_enabled = Mod::get()->getSavedValue<bool>("tps-bypass", false);
-    if (!toasty::tps::setEnabled(s_enabled)) {
+    if (!toasty::tps::patch::setEnabled(s_enabled)) {
         s_enabled = false;
         Mod::get()->setSavedValue<bool>("tps-bypass", false);
     }
