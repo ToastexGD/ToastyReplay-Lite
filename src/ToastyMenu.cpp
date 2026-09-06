@@ -358,6 +358,12 @@ bool ToastyMenu::init() {
                                 "Safe Mode",
                                 Mod::get()->getSavedValue<bool>("safe-mode", false)));
 
+        scroll->m_contentLayer->addChild(
+            this->makeToggleRow("auto-safe-mode",
+                                "Auto Safe Mode",
+                                Mod::get()->getSavedValue<bool>("auto-safe-mode", false)));
+
+
         scroll->m_contentLayer->updateLayout();
         scroll->scrollToTop();
         this->updateModes();
@@ -734,7 +740,7 @@ geode::NineSlice* ToastyMenu::addPanel(CCNode* page, CCPoint center, CCSize size
 ScrollLayer* ToastyMenu::addScroll(CCNode* page, int tab, CCPoint pos, CCSize size) {
     auto scroll = ScrollLayer::create(size);
     scroll->setPosition(pos);
-    scroll->enableScrollWheel();
+    scroll->enableScrollWheel(true);
     scroll->m_contentLayer->setLayout(ColumnLayout::create()
                                           ->setAxisReverse(true)
                                           ->setAxisAlignment(AxisAlignment::End)
@@ -1778,6 +1784,7 @@ void ToastyMenu::onReplayMacro(CCObject*) {
         return;
     }
     this->onClose(nullptr);
+    
     queueInMainThread([name = std::move(name)] { startReplayFromMenu(name); });
 }
 

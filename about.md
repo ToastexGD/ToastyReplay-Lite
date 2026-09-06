@@ -47,6 +47,7 @@ Ko-fi icon by dank_meme (Globed).
 - Anticroom
 - Human0443
 - Lyn
+- DominoKiddoo
 
 ### Additional Information
 
